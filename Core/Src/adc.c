@@ -59,6 +59,12 @@ static void adc_calibrate(void)
 
 static void adc_arm(void)
 {
+	/* Start ADC2 before calling MultiModeStart to set ADC2 as slave to ADC 1 */
+	if (HAL_ADC_Start(ADC_TPS2) != HAL_OK) {
+		HAL_ADC_Stop(ADC_TPS2);
+		err_count+=1;
+	};
+
     /* ADC2 is enabled and triggered by the master; it needs no start of its
      * own and has no DMA channel to start. */
     if (HAL_ADCEx_MultiModeStart_DMA(ADC_TPS1, (uint32_t *)&dual_raw, 1u) != HAL_OK) {
