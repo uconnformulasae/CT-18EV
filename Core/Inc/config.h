@@ -39,14 +39,14 @@
 #define TPS2_FAULT_HIGH 2.8f
 
 /* APPS plausibility: (FSAE T.4.2.4). */
-#define APPS_TRIP_PERCENT 0.10f
+#define APPS_TRIP_PERCENT 0.70f
 
 /* Weight given to the previous TPS sample. 0.0f disables the filter. */
 #define TPS_IIR_RATIO 0.0f
 
 /* --- Brake pressure (BPS) and brake plausibility (BSE) --- */
 
-#define BPS_SETPOINT_V 0.765f
+#define BPS_SETPOINT_V 0.500f
 
 /* BSE latches above BSE_TRIP_TPS with the brakes on, and only clears once the
  * pedal drops below BSE_CLEAR_TPS. */
@@ -104,7 +104,7 @@
 #define BMS_TIMEOUT_MS 200u
 
 /* Orion reports pack SoC in 0.5 %/bit */
-#define BMS_SOC_PCT_PER_BIT 0.5f
+#define BMS_SOC_PCT_PER_BIT     0.5f
 #define BMS_SOC_RAW_TO_PCT(raw) ((uint8_t)(((uint16_t)(raw) + 1u) / 2u))
 
 /* Used until the BMS and inverter have been heard from. */

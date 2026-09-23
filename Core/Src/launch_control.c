@@ -39,7 +39,7 @@ static uint32_t map_interp(const uint16_t *bp, const uint16_t *val, int n, uint3
                 return val_lo;
             }
 
-            // Linear interpolation (integer math, no FP needed)
+            // Linear interpolation
             const int32_t val_range = (int32_t)val_hi - (int32_t)val_lo;
             const uint32_t offset = x - bp_lo;
             return (uint32_t)((int32_t)val_lo + (val_range * (int32_t)offset) / (int32_t)bp_range);
@@ -54,7 +54,7 @@ static uint32_t lc_map_lookup(uint32_t motor_speed_rpm)
     return map_interp(lc_map_rpm, lc_map_torque, LC_MAP_SIZE, motor_speed_rpm);
 }
 
-// Now float (32-bit) — atomic on Cortex-M3, was volatile double (non-atomic bug)
+
 static volatile float front_wheel_speed_ms = 0.0f;
 
 /* Timestamp of the last AiM wheel speed CAN message. Written after the speed

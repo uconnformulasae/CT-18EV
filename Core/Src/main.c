@@ -439,7 +439,9 @@ int main(void)
 		brake_pressed = bps > BPS_SETPOINT_V;
 
 		// Ready to Drive button poll
-		rtd_raw = HAL_GPIO_ReadPin(PIN_RTD_BUTTON_PORT, PIN_RTD_BUTTON);
+		// Active low: see PIN_RTD_BUTTON_ACTIVE in pinout.h.
+		rtd_raw = (HAL_GPIO_ReadPin(PIN_RTD_BUTTON_PORT, PIN_RTD_BUTTON)
+				== PIN_RTD_BUTTON_ACTIVE);
 		rtd_raw &= brake_pressed;
 
 		if (rtd_debounce_update(rtd_raw, loop_dt_ms)) {
@@ -974,6 +976,17 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
+  /* PB14 (RTD button) is not in the .ioc, so CubeMX does not generate a
+   * config for it. It was configured up to 50cc7c8 only because main.c had
+   * drifted out of sync with the project file; the regeneration in c59aed0
+   * synced them and silently dropped it, leaving the pin in its reset state
+   * (floating input). Configured here, inside a USER CODE block, so a future
+   * regeneration cannot drop it again. Pull direction comes from pinout.h so
+   * it stays matched to PIN_RTD_BUTTON_ACTIVE. */
+  GPIO_InitStruct.Pin = PIN_RTD_BUTTON;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = PIN_RTD_BUTTON_PULL;
+  HAL_GPIO_Init(PIN_RTD_BUTTON_PORT, &GPIO_InitStruct);
   /* USER CODE END MX_GPIO_Init_2 */
 }
 

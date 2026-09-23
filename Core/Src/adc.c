@@ -59,14 +59,19 @@ static void adc_calibrate(void)
 
 static void adc_arm(void)
 {
-	/* Start ADC2 before calling MultiModeStart to set ADC2 as slave to ADC 1 */
-	if (HAL_ADC_Start(ADC_TPS2) != HAL_OK) {
-		HAL_ADC_Stop(ADC_TPS2);
-		err_count+=1;
-	};
+    /* Arms the slave's trigger. HAL_ADCEx_MultiModeStart_DMA only sets ADON
+     * on ADC2 (via ADC_Enable) and sets EXTTRIG on the master alone, and an F1
+     * slave with EXTTRIG clear never responds to the master's trigger - ADC2
+     * would convert once during calibration and then never again, leaving a
+     * stale value in the high half of ADC1->DR. HAL_ADC_Start does not start a
+     * conversion when the target is a slave; it only sets EXTTRIG. */
+    if (HAL_ADC_Start(ADC_TPS2) != HAL_OK) {
+        (void)HAL_ADC_Stop(ADC_TPS2);
+        err_count++;
+    }
 
-    /* ADC2 is enabled and triggered by the master; it needs no start of its
-     * own and has no DMA channel to start. */
+    /* ADC2 has no DMA channel of its own on F1; its conversion arrives in the
+     * high half of this one transfer. */
     if (HAL_ADCEx_MultiModeStart_DMA(ADC_TPS1, (uint32_t *)&dual_raw, 1u) != HAL_OK) {
         /* Previous conversion never completed; tear down so the next tick can
          * arm cleanly. */
