@@ -13,3 +13,14 @@
 
 # Eclipse workspace state - machine-specific, not project source.
 /.metadata/
+
+# Host test binaries (tools/Makefile).
+/tools/soc_kf_test
+/tools/lc_test
+/tools/can_tx_test
+/tools/rtd_test
+/tools/adc_test
+/tools/*.dSYM/
+
+# CubeIDE macOS artifact.
+/.osx.project

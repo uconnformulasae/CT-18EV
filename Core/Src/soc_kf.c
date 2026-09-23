@@ -5,6 +5,7 @@
  */
 
 #include "soc_kf.h"
+#include "config.h"
 #include "soc_kf_tables.h"
 #include <math.h>
 
@@ -34,15 +35,20 @@ static inline void crit_exit(uint32_t s)
 /* Exact integer accumulators of (0.1 A * 1 ms); cleared every update. */
 #define ACC_TO_AS 1e-4f
 
+/* SoC the pack could move in one unheard second at worst-case current. */
+#define BLACKOUT_SOC_PER_S ((SOC_KF_BLACKOUT_I_A / (float)SOC_KF_NP) / (3600.0f * SOC_KF_CAP_AH))
+
 typedef struct {
     /* ISR-written: read only under crit_enter/crit_exit. */
     volatile int32_t pending_bms; // 0.1A*ms, pack
+    volatile uint32_t pending_ms; // wall time pending_bms covers
     volatile int16_t ibat_raw;
     volatile uint16_t vbat_raw;
     volatile uint8_t btmp_raw;
     volatile uint8_t soc_raw;
     volatile uint32_t last_bms_tick;
     volatile uint32_t bms_dt_tick;
+    volatile uint32_t first_bms_tick;
     volatile uint32_t rest_ms;
     volatile uint8_t have_bms;
 
@@ -51,7 +57,6 @@ typedef struct {
     float p00, p01, p10, p11;
     float charge_ah;
     uint32_t last_update_tick;
-    uint32_t first_bms_tick;
     uint8_t initialised;
     uint8_t init_method; // 0 none, 1 rest-OCV, 2 Orion seed
 
@@ -102,6 +107,49 @@ static float ocv_inverse(float v)
     return 1.0f;
 }
 
+static float temp_scale(uint8_t temp_c)
+{
+    const float t = (float)temp_c;
+    if (t <= SOC_KF_TEMP_MIN_C)
+        return soc_kf_r_temp[0];
+    if (t >= SOC_KF_TEMP_MAX_C)
+        return soc_kf_r_temp[SOC_KF_TEMP_N_BP - 1];
+
+    const float x = (t - SOC_KF_TEMP_MIN_C) * 0.2f;
+    int k = (int)x;
+    if (k > SOC_KF_TEMP_N_BP - 2)
+        k = SOC_KF_TEMP_N_BP - 2;
+
+    const float f = x - (float)k;
+    return soc_kf_r_temp[k] + f * (soc_kf_r_temp[k + 1] - soc_kf_r_temp[k]);
+}
+
+static void clamp_p_diag(void)
+{
+    if (s.p00 < SOC_KF_P_FLOOR)
+        s.p00 = SOC_KF_P_FLOOR;
+    if (s.p11 < SOC_KF_P_FLOOR)
+        s.p11 = SOC_KF_P_FLOOR;
+    if (s.p00 > SOC_KF_P_MAX)
+        s.p00 = SOC_KF_P_MAX;
+    if (s.p11 > SOC_KF_P_MAX)
+        s.p11 = SOC_KF_P_MAX;
+}
+
+/* Returns 1 if the estimate had to be pulled back onto [0, 1]. */
+static int clamp_z(void)
+{
+    if (s.z < 0.0f) {
+        s.z = 0.0f;
+        return 1;
+    }
+    if (s.z > 1.0f) {
+        s.z = 1.0f;
+        return 1;
+    }
+    return 0;
+}
+
 static int16_t clamp_i16(float v)
 {
     if (v > 32767.0f)
@@ -125,12 +173,14 @@ void soc_kf_init(void)
     const uint32_t pm = crit_enter();
 
     s.pending_bms = 0;
+    s.pending_ms = 0;
     s.ibat_raw = 0;
     s.vbat_raw = 0;
     s.btmp_raw = 0;
     s.soc_raw = 0;
     s.last_bms_tick = 0;
     s.bms_dt_tick = 0;
+    s.first_bms_tick = 0;
     s.rest_ms = 0;
     s.have_bms = 0;
 
@@ -144,7 +194,6 @@ void soc_kf_init(void)
     s.p11 = SOC_KF_P0_V1;
     s.charge_ah = 0.0f;
     s.last_update_tick = 0;
-    s.first_bms_tick = 0;
     s.initialised = 0;
     s.init_method = 0;
 
@@ -170,11 +219,9 @@ void soc_kf_feed_bms(int16_t ibat_raw, uint16_t vbat_raw, uint8_t btmp_raw, uint
     const int32_t i_signed = -(int32_t)ibat_raw;
 #endif
 
+    uint32_t dt = 0u; // no interval to attribute to the first frame
     if (s.have_bms) {
-        const uint32_t dt = tick_ms - s.bms_dt_tick; // wrap-safe
-        if (dt > 0u && dt <= SOC_KF_STALE_MS) {
-            s.pending_bms += i_signed * (int32_t)dt;
-        }
+        dt = tick_ms - s.bms_dt_tick; // wrap-safe
     } else {
         s.have_bms = 1;
         s.first_bms_tick = tick_ms;
@@ -187,16 +234,19 @@ void soc_kf_feed_bms(int16_t ibat_raw, uint16_t vbat_raw, uint8_t btmp_raw, uint
     s.btmp_raw = btmp_raw;
     s.soc_raw = soc_raw;
 
-    {
-        const int32_t rest_thresh = (int32_t)(SOC_KF_REST_CURRENT_A * 10.0f);
-        const int32_t mag = (i_signed < 0) ? -i_signed : i_signed;
-        if (mag < rest_thresh) {
-            if (s.rest_ms < 0xFFFF0000u) {
-                s.rest_ms += 20u; // nominal 0x600 interval
-            }
-        } else {
-            s.rest_ms = 0u;
-        }
+    const int32_t rest_thresh = (int32_t)(SOC_KF_REST_CURRENT_A * 10.0f);
+    const int32_t mag = (i_signed < 0) ? -i_signed : i_signed;
+    const int gap = (dt > SOC_KF_STALE_MS);
+
+    if (gap || mag >= rest_thresh) {
+        s.rest_ms = 0u;
+    } else if (dt > 0u && s.rest_ms < 0xFFFF0000u) {
+        s.rest_ms += dt;
+    }
+
+    if (!gap && dt > 0u) {
+        s.pending_bms += i_signed * (int32_t)dt;
+        s.pending_ms += dt;
     }
 }
 
@@ -205,14 +255,17 @@ void soc_kf_update(uint32_t tick_ms)
     /* snapshot ISR state */
     const uint32_t pm = crit_enter();
     const int32_t pend_bms = s.pending_bms;
+    const uint32_t pend_ms = s.pending_ms;
     const int16_t ibat_raw = s.ibat_raw;
     const uint16_t vbat_raw = s.vbat_raw;
     const uint8_t btmp_raw = s.btmp_raw;
     const uint8_t soc_raw = s.soc_raw;
     const uint32_t bms_tick = s.last_bms_tick;
+    const uint32_t first_tick = s.first_bms_tick;
     const uint32_t rest_ms = s.rest_ms;
     const uint8_t have_bms = s.have_bms;
     s.pending_bms = 0;
+    s.pending_ms = 0;
     crit_exit(pm);
 
 #if SOC_KF_IBAT_DISCHARGE_POSITIVE
@@ -226,19 +279,34 @@ void soc_kf_update(uint32_t tick_ms)
 
     s.charge_ah += (float)pend_bms * ACC_TO_AS / 3600.0f;
 
+    const float dq_cell_as = (float)pend_bms * ACC_TO_AS / (float)SOC_KF_NP;
+    if (s.initialised)
+        s.z -= dq_cell_as / (3600.0f * SOC_KF_CAP_AH);
+
     uint8_t flags = 0;
     if (have_bms && (tick_ms - bms_tick) <= SOC_KF_STALE_MS)
         flags |= SOC_KF_FLAG_BMS_LIVE;
 
-    /* Hold the estimate; never integrate silence. */
     if ((flags & SOC_KF_FLAG_BMS_LIVE) == 0u) {
         flags |= SOC_KF_FLAG_FROZEN;
-        if (s.initialised)
+        if (s.initialised) {
             flags |= SOC_KF_FLAG_INIT;
-        s.dbg.flags = flags;
-        s.dbg.i_pack = i_pack;
-        s.dbg.v_pack = v_pack;
+            if (s.init_method == 1)
+                flags |= SOC_KF_FLAG_OCV_INIT;
+
+            const float gap_s = (float)(tick_ms - s.last_update_tick) * 0.001f;
+            if (gap_s > 0.0f) {
+                s.p00 += (BLACKOUT_SOC_PER_S * BLACKOUT_SOC_PER_S) * gap_s;
+                s.p11 += SOC_KF_Q_V1_PER_S * gap_s;
+                clamp_p_diag();
+            }
+
+            if (clamp_z())
+                flags |= SOC_KF_FLAG_CLAMPED;
+            s.dbg.soc = s.z;
+        }
         s.dbg.charge_ah = s.charge_ah;
+        s.dbg.flags = flags;
         s.last_update_tick = tick_ms;
         return;
     }
@@ -250,13 +318,25 @@ void soc_kf_update(uint32_t tick_ms)
     /* seed: rest OCV, else Orion */
     if (!s.initialised) {
         if (v_ok && rest_ms >= SOC_KF_REST_MS) {
+            float slope;
             s.z = ocv_inverse(v_cell);
+            (void)lut(soc_kf_ocv, s.z, &slope);
+            if (slope < SOC_KF_OCV_SLOPE_MIN)
+                slope = SOC_KF_OCV_SLOPE_MIN;
+
+            const float sv = SOC_KF_V1_MAX_V * expf(-(float)rest_ms * 0.001f / SOC_KF_TAU1_S);
+            const float gz = sv / slope;
+
             s.v1 = 0.0f;
             s.initialised = 1;
             s.init_method = 1;
-            s.p00 = SOC_KF_P0_Z_OCV;
-        } else if ((tick_ms - s.first_bms_tick) >= SOC_KF_INIT_TIMEOUT_MS) {
-            s.z = (float)soc_raw * 0.01f;
+            s.p00 = SOC_KF_P0_Z_OCV + gz * gz;
+            s.p01 = gz * sv;
+            s.p10 = gz * sv;
+            s.p11 = SOC_KF_P0_V1 + sv * sv;
+        } else if ((tick_ms - first_tick) >= SOC_KF_INIT_TIMEOUT_MS) {
+            /* 0.5 %/bit on the wire - see BMS_SOC_PCT_PER_BIT. */
+            s.z = (float)soc_raw * (BMS_SOC_PCT_PER_BIT * 0.01f);
             if (s.z < 0.0f)
                 s.z = 0.0f;
             if (s.z > 1.0f)
@@ -265,6 +345,9 @@ void soc_kf_update(uint32_t tick_ms)
             s.initialised = 1;
             s.init_method = 2;
             s.p00 = SOC_KF_P0_Z_ORION;
+            s.p01 = 0.0f;
+            s.p10 = 0.0f;
+            s.p11 = SOC_KF_P0_V1;
         } else {
             s.dbg.flags = flags;
             s.dbg.i_pack = i_pack;
@@ -274,9 +357,6 @@ void soc_kf_update(uint32_t tick_ms)
             s.last_update_tick = tick_ms;
             return;
         }
-        s.p01 = 0.0f;
-        s.p10 = 0.0f;
-        s.p11 = SOC_KF_P0_V1;
         s.last_update_tick = tick_ms;
     }
     flags |= SOC_KF_FLAG_INIT;
@@ -291,24 +371,24 @@ void soc_kf_update(uint32_t tick_ms)
         dt = 0.5f; /* guard against a scheduling hiccup */
     s.last_update_tick = tick_ms;
 
-    /* predict: z from the exact charge integral, not dt * latest current */
-    const float dq_cell_as = (float)pend_bms * ACC_TO_AS / (float)SOC_KF_NP;
-    s.z -= dq_cell_as / (3600.0f * SOC_KF_CAP_AH);
+    /* predict */
+    const float i_cell_mean = (pend_ms > 0u) ? (dq_cell_as / ((float)pend_ms * 0.001f)) : i_cell;
 
-    const float r1 = lut(soc_kf_r1, s.z, 0);
+    const float kt = temp_scale(btmp_raw);
+    const float r1 = lut(soc_kf_r1, s.z, 0) * kt;
     const float a = expf(-dt / SOC_KF_TAU1_S);
-    s.v1 = a * s.v1 + r1 * (1.0f - a) * i_cell;
+    s.v1 = a * s.v1 + r1 * (1.0f - a) * i_cell_mean;
 
-    /* P = F P F' + Q, F = [[1,0],[0,a]] */
-    s.p00 = s.p00 + SOC_KF_Q_Z;
+    /* P = F P F' + Q dt */
+    s.p00 = s.p00 + SOC_KF_Q_Z_PER_S * dt;
     s.p01 = a * s.p01;
     s.p10 = a * s.p10;
-    s.p11 = a * a * s.p11 + SOC_KF_Q_V1;
+    s.p11 = a * a * s.p11 + SOC_KF_Q_V1_PER_S * dt;
 
     /* correct: V = OCV(z) - I*R0 - V1, H = [dOCV/dz, -1] */
     float docv_dz;
     const float ocv = lut(soc_kf_ocv, s.z, &docv_dz);
-    const float r0 = lut(soc_kf_r0, s.z, 0);
+    const float r0 = lut(soc_kf_r0, s.z, 0) * kt;
 
     const float v_pred = ocv - i_cell * r0 - s.v1;
     const float y = v_cell - v_pred;
@@ -321,41 +401,46 @@ void soc_kf_update(uint32_t tick_ms)
 
     const float sden = h0 * col0 + h1 * col1 + SOC_KF_R_MEAS;
     if (v_ok && sden > 1e-20f) {
-        /* K = P H' / S */
-        const float k0 = col0 / sden;
-        const float k1 = col1 / sden;
+        const float nis = y * y / sden;
+        if (nis > SOC_KF_NIS_GATE) {
+            flags |= SOC_KF_FLAG_GATED;
+            if (rest_ms >= SOC_KF_REST_MS) {
+                s.p00 *= SOC_KF_GATE_INFLATE;
+                clamp_p_diag();
+            }
+        } else {
+            const float k0 = col0 / sden;
+            const float k1 = col1 / sden;
 
-        s.z += k0 * y;
-        s.v1 += k1 * y;
+            s.z += k0 * y;
+            s.v1 += k1 * y;
 
-        /* P = (I - K H) P */
-        const float r0p0 = h0 * s.p00 + h1 * s.p10;
-        const float r0p1 = h0 * s.p01 + h1 * s.p11;
-        s.p00 -= k0 * r0p0;
-        s.p01 -= k0 * r0p1;
-        s.p10 -= k1 * r0p0;
-        s.p11 -= k1 * r0p1;
+            const float r0p0 = h0 * s.p00 + h1 * s.p10;
+            const float r0p1 = h0 * s.p01 + h1 * s.p11;
+            s.p00 -= k0 * r0p0;
+            s.p01 -= k0 * r0p1;
+            s.p10 -= k1 * r0p0;
+            s.p11 -= k1 * r0p1;
+        }
     }
 
-    /* Asymmetry creep in soft-float is a real failure mode. */
     {
-        const float m = 0.5f * (s.p01 + s.p10);
+        float m = 0.5f * (s.p01 + s.p10);
+
+        clamp_p_diag();
+
+        const float lim = sqrtf(s.p00 * s.p11);
+        if (m > lim)
+            m = lim;
+        if (m < -lim)
+            m = -lim;
+
         s.p01 = m;
         s.p10 = m;
     }
-    if (s.p00 < SOC_KF_P_FLOOR)
-        s.p00 = SOC_KF_P_FLOOR;
-    if (s.p11 < SOC_KF_P_FLOOR)
-        s.p11 = SOC_KF_P_FLOOR;
 
-    if (s.z < 0.0f) {
-        s.z = 0.0f;
+    if (clamp_z())
         flags |= SOC_KF_FLAG_CLAMPED;
-    }
-    if (s.z > 1.0f) {
-        s.z = 1.0f;
-        flags |= SOC_KF_FLAG_CLAMPED;
-    }
 
     /* publish */
     s.dbg.soc = s.z;
@@ -378,11 +463,8 @@ const soc_kf_debug_t *soc_kf_get_debug(void)
 
 void soc_kf_pack_state(uint8_t *d)
 {
-    /* 0.1 mV/bit; 0.01 mV/bit rails at 0.327 V */
     const uint16_t soc = clamp_u16(s.dbg.soc * 10000.0f);
     const int16_t innov = clamp_i16(s.dbg.innovation * 10000.0f);
-    /* Cumulative charge cannot be rebuilt from the logged current: it is
-     * integrated at 50 Hz but logged at ~11 Hz, so re-integrating aliases. */
     const int16_t ah = clamp_i16(s.dbg.charge_ah * 100.0f);
 
     d[0] = (uint8_t)(soc & 0xFF);

@@ -40,4 +40,13 @@ static const float soc_kf_r1[SOC_KF_N_BP] = {
     0.006522f, 0.006289f, 0.006080f, 0.006067f, 0.006227f, 0.006158f,
 };
 
+#define SOC_KF_TEMP_MIN_C 10.0f
+#define SOC_KF_TEMP_MAX_C 55.0f
+#define SOC_KF_TEMP_N_BP  10
+
+/* Resistance scale relative to 25 degC, 10 to 55 degC in 5 degC steps. */
+static const float soc_kf_r_temp[SOC_KF_TEMP_N_BP] = {
+    1.48f, 1.29f, 1.13f, 1.00f, 0.89f, 0.79f, 0.71f, 0.64f, 0.59f, 0.55f,
+};
+
 #endif /* SOC_KF_TABLES_H */

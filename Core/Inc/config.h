@@ -39,14 +39,14 @@
 #define TPS2_FAULT_HIGH 2.8f
 
 /* APPS plausibility: (FSAE T.4.2.4). */
-#define APPS_TRIP_PERCENT 0.4f
+#define APPS_TRIP_PERCENT 0.70f
 
 /* Weight given to the previous TPS sample. 0.0f disables the filter. */
 #define TPS_IIR_RATIO 0.0f
 
 /* --- Brake pressure (BPS) and brake plausibility (BSE) --- */
 
-#define BPS_SETPOINT_V 0.765f
+#define BPS_SETPOINT_V 0.500f
 
 /* BSE latches above BSE_TRIP_TPS with the brakes on, and only clears once the
  * pedal drops below BSE_CLEAR_TPS. */
@@ -74,13 +74,7 @@
 
 /* --- Ready to drive --- */
 
-/* The button is integrated, not timed: each pass with button and brake held
- * adds RISE, every other pass subtracts FALL. Falling faster than it rises
- * means a bouncing input never latches. */
-#define RTD_DEBOUNCE_RISE 3
-#define RTD_DEBOUNCE_FALL 4
-#define RTD_DEBOUNCE_MAX  100
-#define RTD_DEBOUNCE_TRIP 50
+/* Button debounce lives in rtd.h, in milliseconds. */
 
 /* TIM3 ticks, ~10 ms each. */
 #define RTD_BUZZER_TICKS       25
@@ -109,6 +103,10 @@
 /* 10 missed 0x600 frames at 50 Hz. */
 #define BMS_TIMEOUT_MS 200u
 
+/* Orion reports pack SoC in 0.5 %/bit */
+#define BMS_SOC_PCT_PER_BIT     0.5f
+#define BMS_SOC_RAW_TO_PCT(raw) ((uint8_t)(((uint16_t)(raw) + 1u) / 2u))
+
 /* Used until the BMS and inverter have been heard from. */
 #define CURRENT_LIMIT_DEFAULT_A 125u
 #define BUS_VOLTAGE_DEFAULT_V   396u
@@ -130,13 +128,6 @@
 
 #define CAN_HEARTBEAT_MASK 0x0F
 
-/* How long the main loop waits for a free transmit mailbox before dropping
- * the frame. */
-#define CAN_MAILBOX_WAIT_MS    15u
-#define CAN_MAILBOX_WAIT_KF_MS 3u
-
-/* Spacing after the inverter command while still in lockout, so the inverter
- * sees a clean command stream before enable is asserted. */
-#define CAN_LOCKOUT_TX_SPACING_MS 10u
+/* Transmit queueing and backpressure live in can_tx.h. */
 
 #endif /* CONFIG_H */
