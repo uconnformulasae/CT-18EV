@@ -31,6 +31,8 @@
 #include "launch_control.h"
 #include "regen.h"
 #include "soc_kf.h"
+#include "soc_kf_eigen.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -219,7 +221,6 @@ static int32_t torque_lut(float tps) {
   */
 int main(void)
 {
-
   /* USER CODE BEGIN 1 */
 	for (uint32_t i = 0; i < sizeof(RxData); i++) {
 		RxData[i] = 0;
@@ -336,6 +337,10 @@ int main(void)
 
 	// SoC Kalman filter (telemetry only - never gates the control path)
 	soc_kf_init();
+
+	// test if code using Eigen compiles
+	will_eigen_compile();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
