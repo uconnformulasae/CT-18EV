@@ -1,5 +1,4 @@
-/* Software CAN transmit queue. Builds for the host tests with
- * -DCAN_TX_HOST. */
+/* CAN transmit queue */
 
 #include "can_tx.h"
 
@@ -11,7 +10,6 @@ typedef struct {
 
 #ifdef CAN_TX_HOST
 
-/* Host build: fake mailboxes the tests drive directly. */
 uint32_t can_tx_host_free_mailboxes = 3u;
 can_tx_frame_t can_tx_host_sent[64];
 uint32_t can_tx_host_sent_count = 0u;
@@ -49,7 +47,6 @@ static uint8_t mailbox_send(const can_tx_frame_t *f)
     CAN_TxHeaderTypeDef header;
     uint32_t mailbox;
 
-    /* Built per send so every field is set; the HAL reads TransmitGlobalTime. */
     header.StdId = f->std_id;
     header.ExtId = 0u;
     header.IDE = CAN_ID_STD;
@@ -63,8 +60,8 @@ static uint8_t mailbox_send(const can_tx_frame_t *f)
 #endif
 
 static can_tx_frame_t queue[CAN_TX_QUEUE_LEN];
-static uint8_t q_head; /* next write */
-static uint8_t q_tail; /* next read  */
+static uint8_t q_head;
+static uint8_t q_tail;
 static uint8_t q_count;
 static uint16_t q_dropped;
 
@@ -99,7 +96,7 @@ void can_tx_pump(void)
 {
     while (q_count > 0u && mailboxes_free() > 0u) {
         if (!mailbox_send(&queue[q_tail])) {
-            break; /* refused despite reporting free; retry next pass */
+            break; /* mailbox busy */
         }
         q_tail = (uint8_t)((q_tail + 1u) % CAN_TX_QUEUE_LEN);
         q_count--;

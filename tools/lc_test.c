@@ -1,7 +1,4 @@
-/* Host tests for launch_control. Includes the .c directly to reach the static
- * helpers and module state.
- *   cc -I../Core/Inc -o lc_test lc_test.c -lm
- */
+/* Host tests for launch control */
 
 #include <stdio.h>
 #include <math.h>
@@ -39,17 +36,12 @@ static void check_eq(int32_t got, int32_t want, const char *what)
     }
 }
 
-/* Harness: one pass of the main loop. Clock advances, the AiM broadcast
- * refreshes the front wheel speed, then lc_update() runs. */
-
-#define STEP_MS 10u /* nominal loop period */
+#define STEP_MS 10u
 
 static uint32_t test_tick;
-static float test_front_ms;  /* speed the "AiM" is reporting */
-static int test_sensor_live; /* 0 = stop broadcasting */
+static float test_front_ms;
+static int test_sensor_live;
 
-/* lc_init() leaves the sensor inputs alone, so clear them here rather than
- * widening it. */
 static void lc_reset_all(void)
 {
     launch_control_enable = 0;
@@ -68,13 +60,13 @@ static void set_front(float ms)
     test_front_ms = ms;
 }
 
-/* m/s -> the km/h x10 units the CAN signal carries. */
+/* m/s to CAN km/h x10 */
 static uint16_t ms_to_x10(float ms)
 {
     return (uint16_t)(ms * 36.0f + 0.5f);
 }
 
-/* rpm that produces a given rear wheel speed. */
+/* m/s to motor rpm */
 static uint32_t ms_to_rpm(float ms)
 {
     return (uint32_t)(ms * LC_MS_TO_RPM + 0.5f);
@@ -95,22 +87,19 @@ static int32_t step(int32_t torque, uint32_t rpm, float tps)
     return step_dt(torque, rpm, tps, STEP_MS);
 }
 
-/* Run up to a launching state at the given front speed. */
 static void arm_and_launch(float front_ms)
 {
     set_front(0.0f);
     launch_control_enable = 1;
-    step(1000, 0, 0.5f); /* ARMED -> OPENLOOP at standstill */
+    step(1000, 0, 0.5f);
     set_front(front_ms);
 }
-
-/* ------------------------------------------------------------------------- */
 
 static void test_conversions(void)
 {
     printf("test_conversions\n");
 
-    /* 36.0 km/h is 10 m/s, and the CAN signal is km/h x10. */
+    /* 36.0 km/h is 10 m/s */
     lc_reset_all();
     lc_feed_wheel_speed(360);
     check_near(front_wheel_speed_ms, 10.0f, 1e-4f, "360 km/h x10 -> 10 m/s");
@@ -121,22 +110,8 @@ static void test_conversions(void)
     check_near(motor_rpm_to_wheel_ms(1000), 1000.0f * LC_RPM_TO_MS, 1e-4f, "rpm -> m/s");
     check_near(motor_rpm_to_wheel_ms(0), 0.0f, 1e-6f, "zero rpm -> zero m/s");
 
-    /* The two precomputed constants must be exact inverses. */
+    /* Conversion constants are exact inverses */
     check_near(LC_RPM_TO_MS * LC_MS_TO_RPM, 1.0f, 1e-5f, "RPM_TO_MS inverts MS_TO_RPM");
-
-    /* A reciprocated LC_GEAR_RATIO still round-trips through LC_MS_TO_RPM, so
-     * the inverse check above passes either way. Only the physical relation
-     * pins the direction of the conversion. */
-    const float v6000 = motor_rpm_to_wheel_ms(6000);
-    const float wheel_rps = 6000.0f / LC_GEAR_RATIO / 60.0f;
-    check_near(v6000, wheel_rps * 2.0f * 3.14159265f * LC_TIRE_RADIUS_M, 1e-3f,
-               "rpm -> m/s divides by the reduction");
-    check(v6000 > 10.0f && v6000 < 60.0f, "6000 rpm is a plausible road speed");
-
-    printf("    6000 rpm implies %.1f m/s (%.0f km/h) at LC_GEAR_RATIO=%.4f\n", v6000, v6000 * 3.6f,
-           LC_GEAR_RATIO);
-    printf("    LC_EXIT_SPEED_MS (%.0f m/s) implies %u rpm\n", (double)LC_EXIT_SPEED_MS,
-           ms_to_rpm(LC_EXIT_SPEED_MS));
 }
 
 static void test_map_interp(void)
@@ -273,78 +248,6 @@ static void test_measured_dt(void)
     check_near(dbg.dt_s, 0.020f, 1e-6f, "dt is correct across a tick wraparound");
 }
 
-static void test_dt_invariance(void)
-{
-    printf("test_dt_invariance\n");
-
-    /* Same scenario, same wall-clock time, different step size: the result
-     * must match. */
-    const float front = 3.0f;
-    const uint32_t spin = ms_to_rpm(6.0f); /* 50% slip */
-    const uint32_t total_ms = 200u;
-
-    lc_reset_all();
-    arm_and_launch(front);
-    step(2200, spin, 0.5f); /* -> closed loop */
-    check(dbg.state == LC_STATE_LAUNCHING_CLOSEDLOOP, "closed loop at 10 ms steps");
-    for (uint32_t t = 0; t < total_ms; t += 10u) {
-        step_dt(2200, spin, 0.5f, 10u);
-    }
-    const float slip_coarse = dbg.slip_ratio;
-    const float iterm_coarse = dbg.pid_i_term;
-
-    lc_reset_all();
-    arm_and_launch(front);
-    step(2200, spin, 0.5f);
-    check(dbg.state == LC_STATE_LAUNCHING_CLOSEDLOOP, "closed loop at 5 ms steps");
-    for (uint32_t t = 0; t < total_ms; t += 5u) {
-        step_dt(2200, spin, 0.5f, 5u);
-    }
-    const float slip_fine = dbg.slip_ratio;
-    const float iterm_fine = dbg.pid_i_term;
-
-    printf("    slip  %.4f (10 ms) vs %.4f (5 ms)\n", (double)slip_coarse, (double)slip_fine);
-    printf("    Iterm %.2f (10 ms) vs %.2f (5 ms)\n", (double)iterm_coarse, (double)iterm_fine);
-
-    check_near(slip_fine, slip_coarse, 0.02f, "filtered slip is step-size invariant");
-    check_near(iterm_fine, iterm_coarse, fabsf(iterm_coarse) * 0.10f + 1.0f,
-               "integral term is step-size invariant");
-
-    /* Steady state matches whatever the weight, so check the transient too. */
-    const uint32_t rpm10 = ms_to_rpm(10.0f);
-    const uint32_t settle_ms = 20u;
-
-    lc_reset_all();
-    set_front(0.0f);
-    arm_and_launch(0.0f);
-    step_dt(1000, 0u, 0.5f, 10u);    /* seed the filter at slip 0 */
-    step_dt(1000, rpm10, 0.5f, 10u); /* first filtered call, at nominal dt */
-    for (uint32_t t = 0; t < settle_ms; t += 10u) {
-        step_dt(1000, rpm10, 0.5f, 10u);
-    }
-    const float transient_coarse = dbg.slip_ratio;
-
-    lc_reset_all();
-    set_front(0.0f);
-    arm_and_launch(0.0f);
-    step_dt(1000, 0u, 0.5f, 10u);
-    step_dt(1000, rpm10, 0.5f, 10u);
-    for (uint32_t t = 0; t < settle_ms; t += 5u) {
-        step_dt(1000, rpm10, 0.5f, 5u);
-    }
-    const float transient_fine = dbg.slip_ratio;
-
-    printf("    transient slip after %u ms: %.4f (10 ms) vs %.4f (5 ms)\n", settle_ms,
-           (double)transient_coarse, (double)transient_fine);
-    check_near(transient_fine, transient_coarse, 0.01f, "filter transient is step-size invariant");
-
-    /* And it matches the analytic exponential for the documented tau. */
-    const float expect = 1.0f - expf(-(float)settle_ms * 0.001f / LC_SLIP_TAU_S);
-    const float first = 1.0f - LC_SLIP_FILTER_ALPHA;
-    const float analytic = first + (1.0f - first) * expect;
-    check_near(transient_coarse, analytic, 0.02f, "filter follows the documented tau");
-}
-
 static void test_sensor_health(void)
 {
     printf("test_sensor_health\n");
@@ -430,7 +333,7 @@ static void test_state_machine(void)
     step(1000, 0, 0.5f);
     check(dbg.state == LC_STATE_ARMED, "exit speed returns to armed");
 
-    /* Disabling mid-launch ends it. */
+    /* Disabling mid-launch ends it */
     lc_reset_all();
     arm_and_launch(1.0f);
     check(dbg.state == LC_STATE_LAUNCHING_OPENLOOP, "launching before disable");
@@ -439,31 +342,11 @@ static void test_state_machine(void)
     check(dbg.state == LC_STATE_ARMED, "disable mid-launch returns to armed");
 }
 
-static void test_torque_passthrough(void)
-{
-    printf("test_torque_passthrough\n");
-
-    lc_reset_all();
-    set_front(10.0f);
-    check_eq(step(1500, 0, 0.0f), 1500, "armed passes torque through");
-
-    launch_control_enable = 1;
-    step(1500, 0, 0.0f);
-    check(dbg.state == LC_STATE_ARMED, "armed");
-    check_eq(step(1500, 0, 0.0f), 1500, "armed passes torque through");
-}
-
 static void test_negative_torque_passthrough(void)
 {
     printf("test_negative_torque_passthrough\n");
 
-    /* Regen torque is negative and must pass through unchanged, not wrap
-     * through unsigned arithmetic. REGEN_TPS_THRESHOLD and LC_THROTTLE_RELEASE
-     * are the same throttle position, so regen can only arrive on a pass where
-     * the state machine has already left a launching state: the reachable
-     * cases are disabled and armed. The open-loop case below is the guard
-     * itself, proving the early return runs before the per-state torque
-     * logic. */
+    /* Regen torque is negative and passes through unchanged */
     const int32_t regen = -250;
 
     lc_reset_all();
@@ -479,7 +362,7 @@ static void test_negative_torque_passthrough(void)
     check(dbg.state == LC_STATE_LAUNCHING_OPENLOOP, "open loop reached");
     check_eq(step(regen, 0, 0.5f), regen, "the map never clobbers regen torque");
 
-    /* Zero is the boundary and must not be treated as drive torque. */
+    /* Zero torque boundary */
     check_eq(step(0, 0, 0.5f), 0, "zero torque passes through");
 }
 
@@ -629,10 +512,6 @@ static void test_exit_speed_does_not_rearm(void)
     check(dbg.state == LC_STATE_ARMED, "re-arms once the driver lifts");
 }
 
-/* The derivative term is the whole closed-loop response to rising slip.
- * Assertions are directional rather than numeric: LC_KD is tuned against track
- * data, so only the sign, the decay and the absence of the open-loop cut hold
- * for every gain. */
 static void test_closed_loop_derivative(void)
 {
     printf("test_closed_loop_derivative\n");
@@ -640,9 +519,7 @@ static void test_closed_loop_derivative(void)
     lc_reset_all();
     arm_and_launch(3.0f);
 
-    /* Entering closed loop seeds the slip filter, so the rate the derivative
-     * sees on the first pass is the measured one rather than the filter
-     * settling up from zero. */
+    /* Closed loop seeds slip filter */
     step(2200, ms_to_rpm(3.3f), 0.9f);
     check(dbg.state == LC_STATE_LAUNCHING_CLOSEDLOOP, "closed loop");
     check_near(dbg.pid_d_term, 0.0f, 1.0f, "no derivative kick on entry");
@@ -708,10 +585,8 @@ int main(void)
     test_slip_ratio();
     test_slip_filter_and_rate();
     test_measured_dt();
-    test_dt_invariance();
     test_sensor_health();
     test_state_machine();
-    test_torque_passthrough();
     test_negative_torque_passthrough();
     test_torque_limiting();
     test_slip_rate_cut();

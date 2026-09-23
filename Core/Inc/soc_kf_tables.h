@@ -1,18 +1,11 @@
-/**
- * @file    soc_kf_tables.h
- * @brief   Molicel P50B at 25 degC. GENERATED - see spec Appendix A.
- *          OCV from the C/20 discharge sweep (the charge sweep is wrong by up
- *          to 230 mV). R0/R1 split by K = 0.6444, weakest below ~20% SoC.
- *          Breakpoints uniform so lookups index by multiply.
- */
-
 #ifndef SOC_KF_TABLES_H
 #define SOC_KF_TABLES_H
 
 #define SOC_KF_N_BP   41
 #define SOC_KF_TAU1_S 24.5f
-#define SOC_KF_CAP_AH 4.9901f /* per cell, C/20 measured */
+#define SOC_KF_CAP_AH 4.9901f /* Per cell (C/20) */
 
+/* Molicel P50B OCV and RC parameters (25 C) */
 static const float soc_kf_ocv[SOC_KF_N_BP] = {
     2.518034f, 2.701741f, 2.815751f, 2.895162f, 2.966806f, 3.037089f, 3.103833f,
     3.162523f, 3.214335f, 3.262872f, 3.310932f, 3.358357f, 3.401686f, 3.440076f,
@@ -44,7 +37,7 @@ static const float soc_kf_r1[SOC_KF_N_BP] = {
 #define SOC_KF_TEMP_MAX_C 55.0f
 #define SOC_KF_TEMP_N_BP  10
 
-/* Resistance scale relative to 25 degC, 10 to 55 degC in 5 degC steps. */
+/* Resistance scale vs temperature (10 to 55 C in 5 C steps) */
 static const float soc_kf_r_temp[SOC_KF_TEMP_N_BP] = {
     1.48f, 1.29f, 1.13f, 1.00f, 0.89f, 0.79f, 0.71f, 0.64f, 0.59f, 0.55f,
 };

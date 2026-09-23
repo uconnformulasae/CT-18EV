@@ -1,24 +1,8 @@
-/* Replay a logged BMS stream through soc_kf and compare against the SoC the
- * car actually published on 0x558. Includes the .c directly to reach the
- * static state, the same way soc_kf_test.c does.
- *
- *   cc -DSOC_KF_HOST -I../Core/Inc -o soc_kf_replay soc_kf_replay.c -lm
- *   ./soc_kf_replay log.csv [options]
- *
- * The CSV needs a header line and these columns, in order:
- *
- *   t_ms,ibat_raw,vbat_raw,btmp_raw,soc_raw[,kf_logged]
- *
- * The four raw fields are the 0x600 payload exactly as soc_kf_feed_bms() takes
- * them - int16 0.1 A/bit, uint16 0.1 V/bit, uint8 1 C/bit, uint8 0.5 %/bit -
- * NOT engineering units. kf_logged is optional and is the SoC the car reported
- * in 0x558 bytes 0-1, in percent, used only for the comparison column.
- *
- * IMPORTANT: feed the log at the real 0x600 rate. A logger that subsamples
- * (an AiM EVO5 records these at ~31 Hz against a 50 Hz broadcast) will change
- * which seed path the filter takes and quietly invalidate the replay, so the
- * detected rate is printed and flagged. Resample to the broadcast rate first.
+/* Replay logged BMS stream (0x600) through soc_kf and compare with 0x558.
+ * Expects CSV: t_ms,ibat_raw,vbat_raw,btmp_raw,soc_raw[,kf_logged]
+ * Raw fields match 0x600 scaling (0.1 A, 0.1 V, 1 C, 0.5%).
  */
+
 
 #include <stdio.h>
 #include <stdlib.h>

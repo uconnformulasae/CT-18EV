@@ -1,9 +1,6 @@
 #include "rtd.h"
 
-/* Milliseconds x RTD_DEBOUNCE_FALL_DEN. Scaling the accumulator instead of
- * dividing each step keeps the rise/fall ratio exact at short dt, where
- * dividing dt_ms by DEN would truncate to parity. */
-static int32_t hold_scaled;
+static int32_t hold_scaled; /* Scaled by RTD_DEBOUNCE_FALL_DEN */
 
 #define HOLD_MAX_SCALED  ((int32_t)RTD_DEBOUNCE_MAX_MS * RTD_DEBOUNCE_FALL_DEN)
 #define HOLD_TRIP_SCALED ((int32_t)RTD_DEBOUNCE_TRIP_MS * RTD_DEBOUNCE_FALL_DEN)

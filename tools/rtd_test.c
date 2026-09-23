@@ -1,6 +1,4 @@
-/* Host tests for rtd. Includes the .c directly to reach the accumulator.
- *   cc -I../Core/Inc -o rtd_test rtd_test.c
- */
+/* Host tests for rtd */
 
 #include <stdio.h>
 
@@ -27,8 +25,7 @@ static void check_eq(long got, long want, const char *what)
     }
 }
 
-/* Hold continuously in steps of dt_ms; return the elapsed ms at which the
- * debounce latched, or 0 if it never did within the budget. */
+/* Return elapsed ms when debounce latches, or 0 if timed out */
 static uint32_t latch_time(uint32_t dt_ms, uint32_t budget_ms)
 {
     rtd_init();
@@ -49,13 +46,11 @@ static void test_latches_after_the_hold_time(void)
     check_eq(rtd_debounce_update(1u, 10u), 0, "not latched immediately");
     check_eq(rtd_hold_ms(), 10, "hold time accumulates in ms");
 
-    /* Still short of the trip. */
     rtd_init();
     for (uint32_t t = 0; t < RTD_DEBOUNCE_TRIP_MS; t += 10u) {
         check_eq(rtd_debounce_update(1u, 10u), 0, "not latched before the trip");
     }
 
-    /* One more step crosses it. */
     check_eq(rtd_debounce_update(1u, 10u), 1, "latches just past the trip");
 }
 
@@ -63,7 +58,6 @@ static void test_hold_time_is_step_size_invariant(void)
 {
     printf("test_hold_time_is_step_size_invariant\n");
 
-    /* The hold requirement must not depend on the loop rate. */
     const uint32_t steps[] = {1u, 2u, 5u, 10u, 11u, 25u};
 
     for (unsigned i = 0; i < sizeof(steps) / sizeof(steps[0]); i++) {
@@ -79,7 +73,7 @@ static void test_release_drains_faster_than_hold_fills(void)
 {
     printf("test_release_drains_faster_than_hold_fills\n");
 
-    /* Fill, then release for half as long: must end lower, not level. */
+    /* Release drains faster than hold fills */
     rtd_init();
     for (int i = 0; i < 10; i++) {
         rtd_debounce_update(1u, 10u);
@@ -95,7 +89,7 @@ static void test_release_drains_faster_than_hold_fills(void)
              (100 * RTD_DEBOUNCE_FALL_DEN - 50 * RTD_DEBOUNCE_FALL_NUM) / RTD_DEBOUNCE_FALL_DEN,
              "drains at exactly NUM/DEN");
 
-    /* And it floors at zero rather than going negative. */
+    /* Floor at zero */
     for (int i = 0; i < 100; i++) {
         rtd_debounce_update(0u, 10u);
     }
@@ -106,7 +100,7 @@ static void test_chatter_cannot_latch(void)
 {
     printf("test_chatter_cannot_latch\n");
 
-    /* Net gain needs duty > NUM/(NUM+DEN) = 4/7. A 50% duty never latches. */
+    /* 50% duty cycle never latches */
     const uint32_t steps[] = {1u, 5u, 10u};
     for (unsigned i = 0; i < sizeof(steps) / sizeof(steps[0]); i++) {
         rtd_init();
@@ -120,7 +114,7 @@ static void test_chatter_cannot_latch(void)
         check(rtd_hold_ms() <= steps[i], "50% duty chatter banks at most one step");
     }
 
-    /* A mostly-held input above the threshold does eventually latch. */
+    /* High duty cycle latches */
     rtd_init();
     int latched = 0;
     for (int n = 0; n < 4000 && !latched; n++) {
@@ -139,7 +133,7 @@ static void test_accumulator_is_capped(void)
     }
     check_eq(rtd_hold_ms(), RTD_DEBOUNCE_MAX_MS, "hold caps at the ceiling");
 
-    /* Bounded credit means releasing clears in bounded time. */
+    /* Drains in bounded time */
     int steps_to_zero = 0;
     while (rtd_hold_ms() > 0u && steps_to_zero < 10000) {
         rtd_debounce_update(0u, 10u);
@@ -152,7 +146,7 @@ static void test_stall_does_not_jump_the_accumulator(void)
 {
     printf("test_stall_does_not_jump_the_accumulator\n");
 
-    /* A stall must not hand the button credit it did not earn. */
+    /* Stall clamped to max dt */
     rtd_init();
     check_eq(rtd_debounce_update(1u, 5000u), 0, "a 5 s step does not latch on its own");
     check_eq(rtd_hold_ms(), RTD_DEBOUNCE_DT_MAX_MS, "the step is clamped to the dt ceiling");

@@ -1,7 +1,5 @@
-/* Host tests for can_tx. Includes the .c directly to reach the ring buffer
- * state and the fake mailboxes.
- *   cc -DCAN_TX_HOST -I../Core/Inc -o can_tx_test can_tx_test.c
- */
+/* Host tests for can_tx */
+
 
 #include <stdio.h>
 #include <string.h>
@@ -81,7 +79,7 @@ static void test_short_dlc_is_zero_filled(void)
 {
     printf("test_short_dlc_is_zero_filled\n");
 
-    /* The RTD frame is one byte from a shared eight byte buffer. */
+    /* RTD frame uses 1 byte from 8 byte buffer */
     reset_all(3u);
     can_tx_send(0x556, PAYLOAD, 1);
     can_tx_pump();
@@ -92,7 +90,7 @@ static void test_short_dlc_is_zero_filled(void)
         check_eq(can_tx_host_sent[0].data[i], 0, "trailing bytes zero filled");
     }
 
-    /* An oversized dlc is clamped rather than overrunning the frame. */
+    /* Oversized DLC clamped to 8 */
     reset_all(3u);
     can_tx_send(0x555, PAYLOAD, 99);
     can_tx_pump();
@@ -103,7 +101,7 @@ static void test_backpressure(void)
 {
     printf("test_backpressure\n");
 
-    /* No free mailboxes: frames queue rather than blocking or being lost. */
+    /* Queue when mailboxes are full */
     reset_all(0u);
     for (int i = 0; i < 4; i++) {
         check_eq(can_tx_send(0x0C0, PAYLOAD, 8), 1, "queued while mailboxes are full");
@@ -113,13 +111,13 @@ static void test_backpressure(void)
     check_eq(can_tx_depth(), 4, "frames stay queued");
     check_eq(can_tx_dropped(), 0, "no drops yet");
 
-    /* One mailbox frees: exactly one frame leaves. */
+    /* One mailbox frees */
     can_tx_host_free_mailboxes = 1u;
     can_tx_pump();
     check_eq(can_tx_host_sent_count, 1, "one frame leaves per free mailbox");
     check_eq(can_tx_depth(), 3, "the rest stay queued");
 
-    /* The bus recovers and the backlog clears. */
+    /* Clear backlog */
     can_tx_host_free_mailboxes = 8u;
     can_tx_pump();
     check_eq(can_tx_depth(), 0, "backlog clears");
@@ -136,7 +134,7 @@ static void test_overflow_drops_and_counts(void)
     }
     check_eq(can_tx_depth(), CAN_TX_QUEUE_LEN, "queue is full");
 
-    /* Past capacity the newest frame is dropped and counted. */
+    /* Drop newest on overflow */
     check_eq(can_tx_send(0x0C0, PAYLOAD, 8), 0, "send reports the drop");
     check_eq(can_tx_dropped(), 1, "drop counted");
     check_eq(can_tx_depth(), CAN_TX_QUEUE_LEN, "depth unchanged by a drop");
@@ -146,7 +144,7 @@ static void test_overflow_drops_and_counts(void)
     }
     check_eq(can_tx_dropped(), 6, "every drop counted");
 
-    /* Frames queued before the overflow are intact and in order. */
+    /* Queued frames before overflow remain intact */
     can_tx_host_free_mailboxes = 64u;
     can_tx_pump();
     check_eq(can_tx_host_sent_count, CAN_TX_QUEUE_LEN, "the queued frames survived");
@@ -157,7 +155,7 @@ static void test_index_wraparound(void)
 {
     printf("test_index_wraparound\n");
 
-    /* Drain as we go so head and tail wrap many times. */
+    /* Drain as we go to wrap head/tail */
     reset_all(1u);
     const int rounds = CAN_TX_QUEUE_LEN * 7 + 3;
     int transmitted = 0;
@@ -186,13 +184,11 @@ static void test_pump_stops_on_refusal(void)
 {
     printf("test_pump_stops_on_refusal\n");
 
-    /* mailboxes_free() can disagree with the peripheral: give up for this
-     * pass rather than spin, without losing the frame. */
+    /* Retry later without losing frame if mailbox refuses */
     reset_all(3u);
     can_tx_send(0x0C0, PAYLOAD, 8);
     can_tx_send(0x555, PAYLOAD, 8);
 
-    /* Claim mailboxes are free while the fake peripheral refuses. */
     can_tx_host_free_mailboxes = 0u;
     can_tx_pump();
     check_eq(can_tx_depth(), 2, "nothing lost when the mailbox refuses");

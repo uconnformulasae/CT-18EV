@@ -1,8 +1,4 @@
-/**
- * @file    soc_kf.c
- * @brief   1-RC EKF, state x = [z, V1], cell scale, discharge-positive.
- *          Builds for the host tests with -DSOC_KF_HOST.
- */
+/* 1-RC EKF pack SoC estimator */
 
 #include "soc_kf.h"
 #include "config.h"
@@ -32,16 +28,13 @@ static inline void crit_exit(uint32_t s)
 }
 #endif
 
-/* Exact integer accumulators of (0.1 A * 1 ms); cleared every update. */
 #define ACC_TO_AS 1e-4f
-
-/* SoC the pack could move in one unheard second at worst-case current. */
 #define BLACKOUT_SOC_PER_S ((SOC_KF_BLACKOUT_I_A / (float)SOC_KF_NP) / (3600.0f * SOC_KF_CAP_AH))
 
 typedef struct {
-    /* ISR-written: read only under crit_enter/crit_exit. */
-    volatile int32_t pending_bms; // 0.1A*ms, pack
-    volatile uint32_t pending_ms; // wall time pending_bms covers
+    /* ISR shared */
+    volatile int32_t pending_bms; /* 0.1A * ms */
+    volatile uint32_t pending_ms;
     volatile int16_t ibat_raw;
     volatile uint16_t vbat_raw;
     volatile uint8_t btmp_raw;
@@ -52,13 +45,13 @@ typedef struct {
     volatile uint32_t rest_ms;
     volatile uint8_t have_bms;
 
-    /* Main loop only. */
+    /* Filter state */
     float z, v1;
     float p00, p01, p10, p11;
     float charge_ah;
     uint32_t last_update_tick;
     uint8_t initialised;
-    uint8_t init_method; // 0 none, 1 rest-OCV, 2 Orion seed
+    uint8_t init_method; /* 1=OCV, 2=Orion */
 
     soc_kf_debug_t dbg;
 } soc_kf_state_t;
@@ -136,7 +129,6 @@ static void clamp_p_diag(void)
         s.p11 = SOC_KF_P_MAX;
 }
 
-/* Returns 1 if the estimate had to be pulled back onto [0, 1]. */
 static int clamp_z(void)
 {
     if (s.z < 0.0f) {
@@ -219,9 +211,9 @@ void soc_kf_feed_bms(int16_t ibat_raw, uint16_t vbat_raw, uint8_t btmp_raw, uint
     const int32_t i_signed = -(int32_t)ibat_raw;
 #endif
 
-    uint32_t dt = 0u; // no interval to attribute to the first frame
+    uint32_t dt = 0u;
     if (s.have_bms) {
-        dt = tick_ms - s.bms_dt_tick; // wrap-safe
+        dt = tick_ms - s.bms_dt_tick;
     } else {
         s.have_bms = 1;
         s.first_bms_tick = tick_ms;
@@ -252,7 +244,6 @@ void soc_kf_feed_bms(int16_t ibat_raw, uint16_t vbat_raw, uint8_t btmp_raw, uint
 
 void soc_kf_update(uint32_t tick_ms)
 {
-    /* snapshot ISR state */
     const uint32_t pm = crit_enter();
     const int32_t pend_bms = s.pending_bms;
     const uint32_t pend_ms = s.pending_ms;
@@ -315,7 +306,6 @@ void soc_kf_update(uint32_t tick_ms)
     if (!v_ok)
         flags |= SOC_KF_FLAG_VBAD;
 
-    /* seed: rest OCV, else Orion */
     if (!s.initialised) {
         if (v_ok && rest_ms >= SOC_KF_REST_MS) {
             float slope;
@@ -335,7 +325,6 @@ void soc_kf_update(uint32_t tick_ms)
             s.p10 = gz * sv;
             s.p11 = SOC_KF_P0_V1 + sv * sv;
         } else if ((tick_ms - first_tick) >= SOC_KF_INIT_TIMEOUT_MS) {
-            /* 0.5 %/bit on the wire - see BMS_SOC_PCT_PER_BIT. */
             s.z = (float)soc_raw * (BMS_SOC_PCT_PER_BIT * 0.01f);
             if (s.z < 0.0f)
                 s.z = 0.0f;
@@ -363,15 +352,13 @@ void soc_kf_update(uint32_t tick_ms)
     if (s.init_method == 1)
         flags |= SOC_KF_FLAG_OCV_INIT;
 
-    /* dt */
     float dt = (float)(tick_ms - s.last_update_tick) * 0.001f;
     if (dt <= 0.0f)
         dt = 0.001f;
     if (dt > 0.5f)
-        dt = 0.5f; /* guard against a scheduling hiccup */
+        dt = 0.5f;
     s.last_update_tick = tick_ms;
 
-    /* predict */
     const float i_cell_mean = (pend_ms > 0u) ? (dq_cell_as / ((float)pend_ms * 0.001f)) : i_cell;
 
     const float kt = temp_scale(btmp_raw);
@@ -379,13 +366,11 @@ void soc_kf_update(uint32_t tick_ms)
     const float a = expf(-dt / SOC_KF_TAU1_S);
     s.v1 = a * s.v1 + r1 * (1.0f - a) * i_cell_mean;
 
-    /* P = F P F' + Q dt */
     s.p00 = s.p00 + SOC_KF_Q_Z_PER_S * dt;
     s.p01 = a * s.p01;
     s.p10 = a * s.p10;
     s.p11 = a * a * s.p11 + SOC_KF_Q_V1_PER_S * dt;
 
-    /* correct: V = OCV(z) - I*R0 - V1, H = [dOCV/dz, -1] */
     float docv_dz;
     const float ocv = lut(soc_kf_ocv, s.z, &docv_dz);
     const float r0 = lut(soc_kf_r0, s.z, 0) * kt;
@@ -442,7 +427,6 @@ void soc_kf_update(uint32_t tick_ms)
     if (clamp_z())
         flags |= SOC_KF_FLAG_CLAMPED;
 
-    /* publish */
     s.dbg.soc = s.z;
     s.dbg.v1 = s.v1;
     s.dbg.innovation = y;
