@@ -500,7 +500,7 @@ int main(void)
 			}
 
 			regen_pack_debug(TxData);
-			can_tx_send(REGEN_DEBUG_CAN_ID, TxData, 7);
+			can_tx_send(REGEN_DEBUG_CAN_ID, TxData, 8);
 
 			print_ready = 0;
 		}

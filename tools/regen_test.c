@@ -83,7 +83,8 @@ static float expected_pedal(float x)
     if (x >= TMAP_REGEN_END) {
         return 0.0f;
     }
-    return (TMAP_REGEN_END - x) / (TMAP_REGEN_END - TMAP_DEADBAND_LOW);
+    const float u = (TMAP_REGEN_END - x) / (TMAP_REGEN_END - TMAP_DEADBAND_LOW);
+    return u * u * (3.0f - 2.0f * u);
 }
 
 static void test_equation(void)
@@ -202,7 +203,7 @@ static void test_partial_lift(void)
     printf("test_partial_lift\n");
     regen_init();
     settle(drive_for(0.6f), RPM, 0.6f, 0.5f, KF_OK);
-    check_eq(settle(0, RPM, 0.15f, 0.5f, KF_OK), -291, "partial regen at 15% pedal");
+    check_eq(settle(0, RPM, 0.15f, 0.5f, KF_OK), -324, "partial regen at 15% pedal");
     check_eq(settle(0, RPM, 0.37f, 0.5f, KF_OK), 0, "coast at 37% pedal");
     check_eq(settle(drive_for(0.6f), RPM, 0.6f, 0.5f, KF_OK), drive_for(0.6f), "back to drive");
 }
@@ -299,23 +300,34 @@ static void test_soc(void)
 {
     printf("test_soc\n");
     regen_init();
-    check_eq(settle(0, RPM, 0.0f, 0.97f, KF_OK), 0, "not armed above 95%");
-    check_eq(settle(0, RPM, 0.0f, 0.95f, KF_OK), 0, "not armed at 95%");
-    check_eq(settle(0, RPM, 0.0f, 0.949f, KF_OK), FULL, "arms below 95%");
-    check_eq(settle(0, RPM, 0.0f, 0.97f, KF_OK), FULL, "stays armed above 95%");
-    check_eq(settle(0, RPM, 0.0f, 1.0f, KF_OK), FULL, "stays armed when full");
+    check_eq(settle(0, RPM, 0.0f, 0.97f, KF_OK), 0, "none above fade start");
+    check_eq(settle(0, RPM, 0.0f, REGEN_SOC_OFF, KF_OK), 0, "none at fade start");
+    check_eq(settle(0, RPM, 0.0f, 0.875f, KF_OK), -109, "quarter strength halfway through fade");
+    check_eq(settle(0, RPM, 0.0f, 0.85f, KF_OK), -194, "curved fade at 85%");
+    check_eq(settle(0, RPM, 0.0f, REGEN_SOC_FULL, KF_OK), FULL, "full at fade end");
+    check_eq(settle(0, RPM, 0.0f, 0.5f, KF_OK), FULL, "full below fade end");
+    check_eq(settle(0, RPM, 0.0f, 0.97f, KF_OK), 0, "follows soc back up");
 
-    regen_init();
-    check_eq(settle(0, RPM, 0.0f, 0.97f, KF_OK), 0, "init disarms");
+    int32_t last = 0;
+    int rising = 0;
+    for (int i = 100; i >= 70; i--) {
+        regen_init();
+        const int32_t t = settle(0, RPM, 0.0f, (float)i / 100.0f, KF_OK);
+        if (t > last) {
+            rising++;
+        }
+        last = t;
+    }
+    check_eq(rising, 0, "regen only grows as soc falls");
 
     regen_init();
     check_eq(settle(0, RPM, 0.0f, 0.0f, SOC_KF_FLAG_BMS_LIVE), 0, "off before kf init");
-    check_eq(settle(0, RPM, 0.0f, 0.97f, KF_OK), 0, "uninitialised kf does not arm");
+    check_eq(settle(0, RPM, 0.0f, NAN, KF_OK), 0, "off on nan soc");
 
     regen_init();
     settle(0, RPM, 0.0f, 0.5f, KF_OK);
     check_eq(settle(0, RPM, 0.0f, 0.5f, SOC_KF_FLAG_INIT), 0, "off when bms stale");
-    check_eq(settle(0, RPM, 0.0f, 0.97f, KF_OK), FULL, "back when bms returns");
+    check_eq(settle(0, RPM, 0.0f, 0.5f, KF_OK), FULL, "back when bms returns");
     check_eq(settle(0, RPM, 0.0f, 0.5f, KF_OK | SOC_KF_FLAG_VBAD), 0, "off on bad voltage");
     check_eq(settle(0, RPM, 0.0f, 0.5f, KF_OK | SOC_KF_FLAG_GATED), FULL, "gated is fine");
 }
@@ -382,11 +394,21 @@ static void test_pack(void)
 
     uint8_t d[8] = {0};
     regen_pack_debug(d);
-    check_eq(d[0], 0x0D, "flags: active, soc ok, armed");
+    check_eq(d[0], 0x0D, "flags: active, soc ok, soc scale");
     check_eq(d[1], 100, "pedal");
     check_eq(d[2], 43, "max regen (Nm)");
     check_eq((int16_t)(d[3] | d[4] << 8), FULL, "target");
     check_eq((int16_t)(d[5] | d[6] << 8), FULL, "torque");
+    check_eq(d[7], 100, "soc scale");
+
+    settle(0, RPM, 0.0f, 0.85f, KF_OK);
+    regen_pack_debug(d);
+    check_eq(d[7], 44, "partial soc scale");
+
+    settle(0, RPM, 0.0f, 0.97f, KF_OK);
+    regen_pack_debug(d);
+    check_eq(d[0] & 0x08, 0, "soc scale flag clear above fade");
+    check_eq(d[7], 0, "zero soc scale");
 }
 
 int main(void)

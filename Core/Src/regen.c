@@ -41,6 +41,13 @@ static float max_regen_nm(uint32_t rpm, float v_pack)
     return ramp * fminf((REGEN_PEAK_NM / 100.0f) * (2.0f * y - y * y / 100.0f), charge_limit);
 }
 
+static float soc_scale(float soc)
+{
+    const float u = (REGEN_SOC_OFF - soc) / (REGEN_SOC_OFF - REGEN_SOC_FULL);
+    const float f = fminf(fmaxf(u, 0.0f), 1.0f);
+    return f * f;
+}
+
 static int32_t slew(int32_t prev, int32_t target, uint32_t dt_ms)
 {
     if (dt_ms > REGEN_DT_MAX_MS) {
@@ -66,18 +73,13 @@ int32_t regen_update(int32_t drive_torque, uint32_t motor_speed_rpm, float tps,
 {
     dbg.soc_ok = (kf->flags & SOC_KF_FLAG_INIT) && (kf->flags & SOC_KF_FLAG_BMS_LIVE) &&
                  !(kf->flags & SOC_KF_FLAG_VBAD);
-    if (dbg.soc_ok && kf->soc < REGEN_SOC_ARM) {
-        dbg.armed = 1;
-    }
+    dbg.soc_scale = dbg.soc_ok ? soc_scale(kf->soc) : 0.0f;
     dbg.cut = cut;
 
     dbg.pedal = pedal_factor(tps);
     dbg.max_nm = max_regen_nm(motor_speed_rpm, kf->v_pack);
 
-    dbg.target = drive_torque;
-    if (dbg.soc_ok && dbg.armed) {
-        dbg.target -= (int32_t)(10.0f * dbg.pedal * dbg.max_nm);
-    }
+    dbg.target = drive_torque - (int32_t)(10.0f * dbg.soc_scale * dbg.pedal * dbg.max_nm);
 
     dbg.torque = cut ? drive_torque : slew(dbg.torque, dbg.target, dt_ms);
     return dbg.torque;
@@ -88,11 +90,13 @@ void regen_pack_debug(uint8_t *d)
     const int16_t target = (int16_t)dbg.target;
     const int16_t torque = (int16_t)dbg.torque;
 
-    d[0] = (uint8_t)((dbg.torque < 0) | (dbg.cut << 1) | (dbg.soc_ok << 2) | (dbg.armed << 3));
+    d[0] = (uint8_t)((dbg.torque < 0) | (dbg.cut << 1) | (dbg.soc_ok << 2) |
+                     ((dbg.soc_scale > 0.0f) << 3));
     d[1] = (uint8_t)(dbg.pedal * 100.0f);
     d[2] = (uint8_t)dbg.max_nm;
     d[3] = (uint8_t)(target & 0xFF);
     d[4] = (uint8_t)((target >> 8) & 0xFF);
     d[5] = (uint8_t)(torque & 0xFF);
     d[6] = (uint8_t)((torque >> 8) & 0xFF);
+    d[7] = (uint8_t)(dbg.soc_scale * 100.0f);
 }
