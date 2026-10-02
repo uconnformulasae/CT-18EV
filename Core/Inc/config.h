@@ -33,7 +33,7 @@
 /* Brake pressure (BPS) and brake plausibility (BSE) */
 #define BPS_SETPOINT_V 0.700f
 
-#define BSE_TRIP_TPS  0.10f
+#define BSE_TRIP_TPS  0.25f
 #define BSE_CLEAR_TPS 0.05f
 
 /* Torque map */
