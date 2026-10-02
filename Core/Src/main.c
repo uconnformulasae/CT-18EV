@@ -483,7 +483,7 @@ int main(void)
 					| should_disable_inverter;
 			TxData[5] = (int) (tps1 * 100) & 0xff;
 			TxData[6] = (int) (tps2 * 100) & 0xff;
-			TxData[7] = (int) (tmap_lut(tps_combined) * 100) & 0xFF;
+			TxData[7] = (int) (tps_combined * 100) & 0xFF;
 
 			can_tx_send(CAN_ID_TX_DEBUG, TxData, 8);
 
