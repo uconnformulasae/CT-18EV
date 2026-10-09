@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#undef REGEN_ENABLE
+#define REGEN_ENABLE 1
+
 #include "../Core/Src/regen.c"
 
 #define KF_OK   (SOC_KF_FLAG_INIT | SOC_KF_FLAG_BMS_LIVE)

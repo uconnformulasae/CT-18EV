@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+#include "config.h"
 #include "soc_kf.h"
 
 #define REGEN_DEBUG_CAN_ID 0x559

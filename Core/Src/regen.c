@@ -16,6 +16,7 @@ const regen_debug_t *regen_get_debug(void)
     return &dbg;
 }
 
+#if REGEN_ENABLE
 static float pedal_factor(float tps)
 {
     const float u = (TMAP_REGEN_END - tps) / (TMAP_REGEN_END - TMAP_DEADBAND_LOW);
@@ -67,10 +68,22 @@ static int32_t slew(int32_t prev, int32_t target, uint32_t dt_ms)
 
     return target;
 }
+#endif
 
 int32_t regen_update(int32_t drive_torque, uint32_t motor_speed_rpm, float tps,
                      const soc_kf_debug_t *kf, uint8_t cut, uint32_t dt_ms)
 {
+#if !REGEN_ENABLE
+    (void)motor_speed_rpm;
+    (void)tps;
+    (void)kf;
+    (void)cut;
+    (void)dt_ms;
+    dbg.target = drive_torque;
+    dbg.torque = drive_torque;
+    dbg.cut = 1;
+    return drive_torque;
+#else
     dbg.soc_ok = (kf->flags & SOC_KF_FLAG_INIT) && (kf->flags & SOC_KF_FLAG_BMS_LIVE) &&
                  !(kf->flags & SOC_KF_FLAG_VBAD);
     dbg.soc_scale = dbg.soc_ok ? soc_scale(kf->soc) : 0.0f;
@@ -83,10 +96,16 @@ int32_t regen_update(int32_t drive_torque, uint32_t motor_speed_rpm, float tps,
 
     dbg.torque = cut ? drive_torque : slew(dbg.torque, dbg.target, dt_ms);
     return dbg.torque;
+#endif
 }
 
 void regen_pack_debug(uint8_t *d)
 {
+#if !REGEN_ENABLE
+    for (int i = 0; i < 8; i++) {
+        d[i] = 0;
+    }
+#else
     const int16_t target = (int16_t)dbg.target;
     const int16_t torque = (int16_t)dbg.torque;
 
@@ -99,4 +118,5 @@ void regen_pack_debug(uint8_t *d)
     d[5] = (uint8_t)(torque & 0xFF);
     d[6] = (uint8_t)((torque >> 8) & 0xFF);
     d[7] = (uint8_t)(dbg.soc_scale * 100.0f);
+#endif
 }

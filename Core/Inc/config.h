@@ -36,11 +36,21 @@
 #define BSE_TRIP_TPS  0.25f
 #define BSE_CLEAR_TPS 0.05f
 
+/* Regen (one-pedal) enable (1 = enabled, 0 = disabled) */
+#ifndef REGEN_ENABLE
+#define REGEN_ENABLE 1
+#endif
+
 /* Torque map */
 #define TMAP_DEADBAND_LOW  0.05f
 #define TMAP_REGEN_END     0.35f
+#if REGEN_ENABLE
 #define TMAP_DRIVE_START   0.39f
 #define TMAP_DEADBAND_HIGH 0.95f
+#else
+#define TMAP_DRIVE_START   TMAP_DEADBAND_LOW
+#define TMAP_DEADBAND_HIGH 0.95f
+#endif
 
 /* Max torque limit (0.1 Nm) */
 #define TORQUE_LIMIT_NM_X10 2200u

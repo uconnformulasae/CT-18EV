@@ -305,7 +305,9 @@ int main(void)
 	adc_init();
 	rtd_init();
 	can_tx_init();
+#if REGEN_ENABLE
 	regen_init();
+#endif
 	soc_kf_init();
   /* USER CODE END 2 */
 
@@ -420,6 +422,7 @@ int main(void)
 
 		torque_request = torque_lut(tmap_lut(tps_combined));
 
+#if REGEN_ENABLE
 		const soc_kf_debug_t *kf = soc_kf_get_debug();
 		const uint8_t speed_stale = (int32_t) (loop_tick - motor_speed_tick)
 				> (int32_t) MOTOR_SPEED_TIMEOUT_MS;
@@ -428,6 +431,7 @@ int main(void)
 				|| launch_control_enable;
 		torque_request = regen_update(torque_request, motor_speed, tps_combined,
 				kf, regen_cut, loop_dt_ms);
+#endif
 
 		lc_feed_tick(HAL_GetTick());
 		if (launch_control_enable) {
@@ -499,8 +503,10 @@ int main(void)
 				can_tx_send(SOC_KF_CAN_ID_STATE, kfData, 8);
 			}
 
+#if REGEN_ENABLE
 			regen_pack_debug(TxData);
 			can_tx_send(REGEN_DEBUG_CAN_ID, TxData, 8);
+#endif
 
 			print_ready = 0;
 		}
