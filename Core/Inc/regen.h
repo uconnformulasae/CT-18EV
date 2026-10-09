@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+#include "config.h"
 #include "soc_kf.h"
 
 #define REGEN_DEBUG_CAN_ID 0x559
@@ -16,8 +17,9 @@
 /* Regen torque at REGEN_RPM_MAX (Nm) */
 #define REGEN_PEAK_NM 100.0f
 
-/* Latches once KF SoC is below this */
-#define REGEN_SOC_ARM 0.80f
+/* Regen fades in from zero at SOC_OFF to full strength at SOC_FULL */
+#define REGEN_SOC_OFF  0.95f
+#define REGEN_SOC_FULL 0.80f
 
 /* Slew below BAND (0.1 Nm), rates in 0.1 Nm/ms */
 #define REGEN_SLEW_BAND 100
@@ -28,11 +30,11 @@
 typedef struct {
     float pedal;
     float max_nm;
+    float soc_scale;
     int32_t target;
     int32_t torque;
     uint8_t cut;
     uint8_t soc_ok;
-    uint8_t armed;
 } regen_debug_t;
 
 void regen_init(void);
