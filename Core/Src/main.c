@@ -32,6 +32,7 @@
 #include "regen.h"
 #include "soc_kf.h"
 #include "soc_derate.h"
+#include "version.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -352,6 +353,7 @@ int main(void)
 
 	uint8_t rtd_raw = 0;
 	uint32_t last_loop_tick = HAL_GetTick();
+	uint32_t version_tick = last_loop_tick - VERSION_TX_MS;
 
 	while (1) {
 		can_tx_pump();
@@ -493,6 +495,12 @@ int main(void)
 			can_tx_send(CAN_ID_TX_INVERTER_CMD, TxData, 8);
 			heartbeat_counter += 1;
 			heartbeat_counter = heartbeat_counter & CAN_HEARTBEAT_MASK;
+		}
+
+		if (loop_tick - version_tick >= VERSION_TX_MS) {
+			version_pack(TxData);
+			can_tx_send(VERSION_CAN_ID, TxData, VERSION_DLC);
+			version_tick = loop_tick;
 		}
 
 		if (print_ready) {
