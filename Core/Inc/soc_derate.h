@@ -9,7 +9,7 @@
 #define SOC_DERATE_CAN_ID 0x55A
 
 /* Which input set the active DCL */
-#define SOC_DERATE_SRC_BMS 0 /* KF invalid */
+#define SOC_DERATE_SRC_BMS 0 /* KF invalid or BMS DCL is 0 */
 #define SOC_DERATE_SRC_SOC 1
 
 typedef struct {

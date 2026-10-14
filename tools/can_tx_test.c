@@ -32,6 +32,7 @@ static void reset_all(uint32_t free_mailboxes)
 {
     can_tx_init();
     can_tx_host_free_mailboxes = free_mailboxes;
+    can_tx_host_refuse = 0u;
     can_tx_host_sent_count = 0u;
     memset(can_tx_host_sent, 0, sizeof(can_tx_host_sent));
 }
@@ -198,6 +199,34 @@ static void test_pump_stops_on_refusal(void)
     check_eq(can_tx_depth(), 0, "drains once mailboxes really are free");
     check_eq(can_tx_host_sent[0].std_id, 0x0C0, "order preserved across the refusal");
     check_eq(can_tx_host_sent[1].std_id, 0x555, "order preserved across the refusal");
+
+    /* HAL refuses even with a mailbox free, e.g. bus-off */
+    reset_all(3u);
+    can_tx_send(0x0C0, PAYLOAD, 8);
+    can_tx_host_refuse = 1u;
+    can_tx_pump();
+    check_eq(can_tx_depth(), 1, "refused frame stays queued");
+    check_eq(can_tx_host_sent_count, 0, "nothing sent while refused");
+
+    can_tx_host_refuse = 0u;
+    can_tx_pump();
+    check_eq(can_tx_depth(), 0, "sent once the HAL accepts");
+    check_eq(can_tx_host_sent[0].std_id, 0x0C0, "the same frame went out");
+}
+
+static void test_fake_log_is_bounded(void)
+{
+    printf("test_fake_log_is_bounded\n");
+
+    /* The fake's 64-frame log must not overrun on long tests */
+    reset_all(1u);
+    for (int i = 0; i < 70; i++) {
+        can_tx_send(0x0C0, PAYLOAD, 8);
+        can_tx_host_free_mailboxes = 1u;
+        can_tx_pump();
+    }
+    check_eq(can_tx_host_sent_count, 64, "log stops at its capacity");
+    check_eq(can_tx_depth(), 0, "frames past the log were still sent");
 }
 
 static void test_init_clears_state(void)
@@ -225,6 +254,7 @@ int main(void)
     test_overflow_drops_and_counts();
     test_index_wraparound();
     test_pump_stops_on_refusal();
+    test_fake_log_is_bounded();
     test_init_clears_state();
 
     printf("\n%d checks, %d failures\n", checks, failures);

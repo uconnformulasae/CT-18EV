@@ -11,6 +11,7 @@ typedef struct {
 #ifdef CAN_TX_HOST
 
 uint32_t can_tx_host_free_mailboxes = 3u;
+uint8_t can_tx_host_refuse = 0u; /* AddTxMessage failing with a mailbox free */
 can_tx_frame_t can_tx_host_sent[64];
 uint32_t can_tx_host_sent_count = 0u;
 
@@ -19,9 +20,10 @@ static uint32_t mailboxes_free(void)
     return can_tx_host_free_mailboxes;
 }
 
+/* Only called once mailboxes_free() says there's room */
 static uint8_t mailbox_send(const can_tx_frame_t *f)
 {
-    if (can_tx_host_free_mailboxes == 0u) {
+    if (can_tx_host_refuse) {
         return 0u;
     }
     if (can_tx_host_sent_count < 64u) {
