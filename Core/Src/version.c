@@ -29,10 +29,15 @@ void version_tx_init(version_tx_t *v, uint32_t now_ms)
 
 uint8_t version_tx_due(version_tx_t *v, uint32_t now_ms)
 {
-    if (v->sent >= VERSION_TX_COUNT || now_ms - v->last_ms < VERSION_TX_MS) {
+    const uint32_t period = (v->sent < VERSION_TX_COUNT) ? VERSION_TX_MS : VERSION_REPEAT_MS;
+
+    if (now_ms - v->last_ms < period) {
         return 0u;
     }
     v->last_ms = now_ms;
-    v->sent++;
+    /* Stops counting once past the burst, so it can't wrap back into it */
+    if (v->sent < VERSION_TX_COUNT) {
+        v->sent++;
+    }
     return 1u;
 }

@@ -7,8 +7,9 @@
 #define VERSION_DLC    5
 #define VERSION_TX_MS  1000u
 
-/* Sent this many times after boot, then never */
-#define VERSION_TX_COUNT 10u
+/* Burst this many times after boot, then repeat slowly so late logs still see it */
+#define VERSION_TX_COUNT  10u
+#define VERSION_REPEAT_MS 60000u
 
 #define VERSION_FLAG_SNAPSHOT 0x01 /* Built with uncommitted changes */
 #define VERSION_FLAG_NONE     0x02 /* No git info at build time */
@@ -22,7 +23,7 @@ void version_pack(uint8_t *d);
 
 void version_tx_init(version_tx_t *v, uint32_t now_ms);
 
-/* 1 when a frame should go out now; counts it as sent */
+/* 1 when a frame should go out now: VERSION_TX_MS for the burst, VERSION_REPEAT_MS after */
 uint8_t version_tx_due(version_tx_t *v, uint32_t now_ms);
 
 #endif /* VERSION_H */
