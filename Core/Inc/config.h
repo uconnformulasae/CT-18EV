@@ -37,6 +37,17 @@
 #define BPS_FAULT_LOW  0.25f
 #define BPS_FAULT_HIGH 4.75f
 
+/* AiM MC-327 brake pressure sensor, 0.5-4.5 V = 0-2000 psi */
+#define BPS_0PSI_V   0.5f
+#define BPS_FULL_V   4.5f
+#define BPS_FULL_PSI 2000.0f
+
+/* 0x55C scale, finer than one ADC count (~0.6 psi) */
+#define BPS_CAN_PSI_PER_BIT 0.1f
+
+/* Brake pressure frame period (ms), 20 Hz */
+#define BPS_TX_MS 50u
+
 #define BSE_TRIP_TPS  0.25f
 #define BSE_CLEAR_TPS 0.05f
 
@@ -104,6 +115,9 @@
 #define CAN_ID_TX_INVERTER_CMD 0x0C0
 #define CAN_ID_TX_DEBUG        0x555
 #define CAN_ID_TX_RTD          0x556
+#define CAN_ID_TX_BPS          0x55C
+
+#define CAN_BPS_DLC 5
 
 #define CAN_STID_MASK_HIGH 0xFFE0
 #define CAN_STID_MASK_LOW  0x0004

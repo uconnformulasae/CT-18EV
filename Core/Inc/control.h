@@ -43,6 +43,9 @@ control_pedals_t control_pedals(control_t *c, float tps1_v, float tps2_v);
 /* Brake pressure sensor open or shorted (T.4.3.4) */
 uint8_t control_bps_oor(float bps_v);
 
+/* Brake pressure sensor volts to psi, clamped to the sensor range */
+float control_bps_psi(float bps_v);
+
 /* Brake + throttle latch (EV.4.7): trips at BSE_TRIP_TPS, clears below BSE_CLEAR_TPS */
 uint8_t control_bse(control_t *c, uint8_t brake, float tps);
 
@@ -58,5 +61,8 @@ int32_t control_torque_limit(float x, uint32_t rpm, uint32_t dcl_a);
 void control_pack_inverter(uint8_t *d, int32_t torque, uint8_t lockout, uint8_t disable,
                            uint8_t heartbeat);
 void control_pack_debug(uint8_t *d, const control_status_t *s);
+
+/* 0x55C: psi x10 [0:1], raw ADC [2:3], little endian; bit 0 pressed, bit 1 oor [4] */
+void control_pack_bps(uint8_t *d, float psi, uint16_t adc, uint8_t pressed, uint8_t oor);
 
 #endif /* CONTROL_H */
