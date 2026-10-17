@@ -3,7 +3,7 @@
 
 
 /* Active tune */
-#define SOC_DERATE_TUNE endurance
+#define SOC_DERATE_TUNE flat
 
 /*
  * Tune setup:

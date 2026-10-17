@@ -35,6 +35,11 @@ control_pedals_t control_pedals(control_t *c, float tps1_v, float tps2_v)
     return p;
 }
 
+uint8_t control_bps_oor(float bps_v)
+{
+    return bps_v < BPS_FAULT_LOW || bps_v > BPS_FAULT_HIGH;
+}
+
 uint8_t control_bse(control_t *c, uint8_t brake, float tps)
 {
     if (!c->bse) {

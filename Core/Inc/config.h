@@ -33,6 +33,10 @@
 /* Brake pressure (BPS) and brake plausibility (BSE) */
 #define BPS_SETPOINT_V 0.700f
 
+/* BPS out-of-range thresholds (V), open or shorted sensor (T.4.3.4) */
+#define BPS_FAULT_LOW  0.25f
+#define BPS_FAULT_HIGH 4.75f
+
 #define BSE_TRIP_TPS  0.25f
 #define BSE_CLEAR_TPS 0.05f
 
@@ -105,5 +109,11 @@
 #define CAN_STID_MASK_LOW  0x0004
 
 #define CAN_HEARTBEAT_MASK 0x0F
+
+/* Why the ECU last reset, 0x556 byte 1 */
+#define RESET_CAUSE_PIN  0x01
+#define RESET_CAUSE_POR  0x02
+#define RESET_CAUSE_SOFT 0x04 /* Error_Handler */
+#define RESET_CAUSE_IWDG 0x08
 
 #endif /* CONFIG_H */
