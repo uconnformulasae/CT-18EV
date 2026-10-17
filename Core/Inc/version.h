@@ -9,7 +9,7 @@
 
 /* Burst this many times after boot, then repeat slowly so late logs still see it */
 #define VERSION_TX_COUNT  10u
-#define VERSION_REPEAT_MS 60000u
+#define VERSION_REPEAT_MS 50u /* TEMP: 20 Hz like 0x55C, AiM visibility test; was 60000u */
 
 #define VERSION_FLAG_SNAPSHOT 0x01 /* Built with uncommitted changes */
 #define VERSION_FLAG_NONE     0x02 /* No git info at build time */
