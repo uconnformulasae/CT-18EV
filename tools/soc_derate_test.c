@@ -209,6 +209,14 @@ static void test_gap(void)
     soc_derate_feed_cells(raw(3.75f), raw(3.70f), 0u);
     soc_derate_dcl(kf_at(soc, KF_OK), BMS_DCL, 0u, STEP_MS);
     check_near(soc_derate_get_debug()->gap, 0.0f, 1e-6f, "gap never negative");
+
+    /* A stall longer than the time constant takes the new gap outright */
+    soc_derate_init();
+    soc_derate_feed_cells(raw(avg_v), raw(avg_v), 0u);
+    soc_derate_dcl(kf_at(soc, KF_OK), BMS_DCL, 0u, STEP_MS);
+    soc_derate_feed_cells(raw(low_v), raw(avg_v), 0u);
+    soc_derate_dcl(kf_at(soc, KF_OK), BMS_DCL, 0u, (uint32_t)(SOC_DERATE_GAP_TAU_S * 2000.0f));
+    check_near(soc_derate_get_debug()->gap, want_gap, 1e-4f, "filter weight capped at 1");
 }
 
 static void test_stale(void)
@@ -256,6 +264,13 @@ static void test_fallback(void)
              "bms dcl of 0 passes through");
     check_eq(soc_derate_dcl(kf_at(0.5f, KF_OK), BMS_DCL, 0u, STEP_MS), expected_dcl(0.5f),
              "back to map when kf valid");
+
+    check(expected_dcl(0.9f) > 0u, "map allows current at 90%");
+    check_eq(soc_derate_dcl(kf_at(0.9f, KF_OK), 0u, 0u, STEP_MS), 0, "bms dcl of 0 beats map");
+    check_eq(soc_derate_get_debug()->src, SOC_DERATE_SRC_BMS, "source is BMS at 0 A");
+    check_eq(soc_derate_dcl(kf_at(0.9f, KF_OK), 1u, 0u, STEP_MS), expected_dcl(0.9f),
+             "any nonzero bms dcl is ignored");
+    check_eq(soc_derate_get_debug()->src, SOC_DERATE_SRC_SOC, "source back to SoC");
 }
 
 static void test_pack(void)
@@ -290,6 +305,11 @@ static void test_pack(void)
     soc_derate_dcl(kf_at(0.0f, KF_OK), BMS_DCL, 0u, STEP_MS);
     soc_derate_pack_debug(b);
     check_eq(b[4] | b[5] << 8, 0, "negative weak soc clamps to 0");
+
+    soc_derate_init();
+    soc_derate_dcl(kf_at(7.0f, KF_OK), BMS_DCL, 0u, STEP_MS);
+    soc_derate_pack_debug(b);
+    check_eq(b[4] | b[5] << 8, 65535, "out of range weak soc saturates high");
 }
 
 int main(void)

@@ -280,6 +280,14 @@ static void test_sensor_health(void)
     set_front(10.0f);
     step_dt(1000, 0, 0.0f, 21u); /* wraps past zero */
     check(dbg.sensor_healthy == 1, "healthy across a tick wraparound");
+
+    /* Never fed, still inside the timeout just after boot */
+    lc_reset_all();
+    test_tick = 0u;
+    lc_feed_tick(test_tick);
+    test_sensor_live = 0;
+    step(1000, 0, 0.0f);
+    check(dbg.sensor_healthy == 0, "never fed is unhealthy even right after boot");
 }
 
 static void test_state_machine(void)
@@ -340,6 +348,17 @@ static void test_state_machine(void)
     launch_control_enable = 0;
     step(1000, 0, 0.5f);
     check(dbg.state == LC_STATE_ARMED, "disable mid-launch returns to armed");
+
+    /* A stale wheel speed above the crossover doesn't close the loop */
+    lc_reset_all();
+    arm_and_launch(1.0f);
+    test_sensor_live = 0;
+    lc_feed_wheel_speed(ms_to_x10(10.0f));
+    step_dt(1000, 0, 0.5f, LC_SENSOR_TIMEOUT_MS + 1u);
+    check(dbg.state == LC_STATE_LAUNCHING_OPENLOOP, "no crossover on a stale wheel speed");
+
+    check(lc_get_state() == dbg.state, "state accessor");
+    check(lc_get_debug() == &dbg, "debug accessor");
 }
 
 static void test_negative_torque_passthrough(void)
@@ -578,6 +597,71 @@ static void test_bumpless_crossover(void)
     check(abs(t_closed - dbg.map_torque) <= 10, "bumpless transfer from open loop to closed loop");
 }
 
+static void test_crossover_in_deep_slip(void)
+{
+    printf("test_crossover_in_deep_slip\n");
+    lc_reset_all();
+    set_front(0.0f);
+    launch_control_enable = 1;
+    step(2200, 0, 0.8f);
+
+    /* Rear spinning at ~90% slip through the open loop */
+    set_front(1.9f);
+    for (int i = 0; i < 10; i++) {
+        step(2200, ms_to_rpm(19.0f), 0.8f);
+    }
+    set_front(2.1f);
+    const int32_t out = step(2200, ms_to_rpm(21.0f), 0.8f);
+    check(dbg.state == LC_STATE_LAUNCHING_CLOSEDLOOP, "crossed over");
+    check_near(dbg.pid_i_term, 0.0f, 1e-6f, "I seed never goes positive");
+    check_eq(out, 0, "deep slip at crossover cuts torque");
+}
+
+/* Closed loop at zero slip, I term then forced by the caller */
+static void enter_closed_loop(void)
+{
+    lc_reset_all();
+    arm_and_launch(3.0f);
+    for (int i = 0; i < 10; i++) {
+        step(2200, ms_to_rpm(3.0f), 0.9f);
+    }
+}
+
+static void test_anti_windup(void)
+{
+    printf("test_anti_windup\n");
+
+    /* Below target slip the loop asks for more than the driver */
+    enter_closed_loop();
+    dbg.pid_i_term = 0.0f;
+    check_eq(step(2200, ms_to_rpm(3.0f), 0.9f), 2200, "never commands above the driver");
+    check_near(dbg.pid_i_term, 0.0f, 1e-6f, "I holds while saturated high");
+
+    /* Saturated high but slipping: I is allowed to unwind */
+    enter_closed_loop();
+    for (int i = 0; i < 20; i++) {
+        step(2200, ms_to_rpm(3.0f / 0.7f), 0.9f);
+    }
+    dbg.pid_i_term = 3000.0f;
+    step(2200, ms_to_rpm(3.0f / 0.7f), 0.9f);
+    check(dbg.pid_i_term < 3000.0f, "I unwinds while saturated high");
+
+    /* Saturated at zero with grip back: I is allowed to recover */
+    enter_closed_loop();
+    dbg.pid_i_term = -5000.0f;
+    check_eq(step(2200, ms_to_rpm(3.0f), 0.9f), 0, "output floored at zero");
+    check(dbg.pid_i_term > -5000.0f, "I recovers while saturated low");
+}
+
+static void test_open_loop_capped_by_driver(void)
+{
+    printf("test_open_loop_capped_by_driver\n");
+    lc_reset_all();
+    arm_and_launch(1.0f);
+    check(lc_map_lookup(0) > 5u, "map asks for more than the driver below");
+    check_eq(step(5, 0, 0.5f), 5, "open loop never exceeds the driver request");
+}
+
 int main(void)
 {
     test_conversions();
@@ -596,6 +680,9 @@ int main(void)
     test_armed_entry_clears_pid();
     test_no_launch_at_speed();
     test_bumpless_crossover();
+    test_crossover_in_deep_slip();
+    test_anti_windup();
+    test_open_loop_capped_by_driver();
 
     printf("\n%d checks, %d failures\n", checks, failures);
     return failures != 0;
