@@ -340,8 +340,7 @@ int main(void)
 
 	uint8_t rtd_raw = 0;
 	uint32_t last_loop_tick = HAL_GetTick();
-	version_tx_t version_tx;
-	version_tx_init(&version_tx, last_loop_tick);
+	uint32_t version_tick = last_loop_tick - VERSION_TX_MS;
 	uint32_t bps_tick = last_loop_tick;
 
 	while (1) {
@@ -441,9 +440,10 @@ int main(void)
 		heartbeat_counter += 1;
 		heartbeat_counter = heartbeat_counter & CAN_HEARTBEAT_MASK;
 
-		if (version_tx_due(&version_tx, loop_tick)) {
+		if (loop_tick - version_tick >= VERSION_TX_MS) {
 			version_pack(TxData);
 			can_tx_send(VERSION_CAN_ID, TxData, VERSION_DLC);
+			version_tick = loop_tick;
 		}
 
 		if (loop_tick - bps_tick >= BPS_TX_MS) {

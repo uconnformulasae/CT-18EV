@@ -19,25 +19,3 @@ void version_pack(uint8_t *d)
     d[3] = (uint8_t)(lo >> 8);
     d[4] = BUILD_FLAGS;
 }
-
-void version_tx_init(version_tx_t *v, uint32_t now_ms)
-{
-    /* Backdated so the first frame goes out right away */
-    v->last_ms = now_ms - VERSION_TX_MS;
-    v->sent = 0u;
-}
-
-uint8_t version_tx_due(version_tx_t *v, uint32_t now_ms)
-{
-    const uint32_t period = (v->sent < VERSION_TX_COUNT) ? VERSION_TX_MS : VERSION_REPEAT_MS;
-
-    if (now_ms - v->last_ms < period) {
-        return 0u;
-    }
-    v->last_ms = now_ms;
-    /* Stops counting once past the burst, so it can't wrap back into it */
-    if (v->sent < VERSION_TX_COUNT) {
-        v->sent++;
-    }
-    return 1u;
-}
