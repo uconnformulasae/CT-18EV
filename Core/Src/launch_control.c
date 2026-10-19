@@ -1,4 +1,5 @@
 #include "launch_control.h"
+#include "main.h"
 #include <math.h>
 
 volatile uint8_t launch_control_enable = 0;
@@ -7,6 +8,14 @@ volatile uint8_t launch_control_enable = 0;
 
 static const uint16_t lc_map_rpm[LC_MAP_SIZE] = {0, 0, 0, 0, 0, 0, 0, 0};
 static const uint16_t lc_map_torque[LC_MAP_SIZE] = {10, 10, 10, 10, 10, 10, 10, 10};
+
+#define LC_LASH_TAKEUP_END_MS (LC_LASH_TAKEUP_TIME_MS)
+#define LC_LIMITED_DRIVELINE_END_MS (LC_LASH_TAKEUP_END_MS + LC_LIMITED_DRIVELINE_TIME_MS)
+#define LC_LIMITED_TRACTION_END_MS (LC_LIMITED_DRIVELINE_END_MS + LC_LIMITED_TRACTION_TIME_MS)
+
+#define LC_LASH_TAKEUP_FINAL_TORQUE_NM (LC_OPENLOOP_MAX_TORQUE_NM * LC_LASH_TAKEUP_TORQUE_FRAC)
+#define LC_LIMITED_DRIVELINE_FINAL_TORQUE_NM (LC_LASH_TAKEUP_FINAL_TORQUE_NM + LC_DRIVELINE_RAMP_RATE_NMPS * LC_LIMITED_DRIVELINE_TIME_MS * 0.001f)
+#define LC_LIMITED_TRACTION_FINAL_TORQUE_NM (LC_LIMITED_DRIVELINE_FINAL_TORQUE_NM + LC_TRACTION_RAMP_RATE_NMPS * LC_LIMITED_TRACTION_TIME_MS * 0.001f)
 
 static uint32_t map_interp(const uint16_t *bp, const uint16_t *val, int n, uint32_t x)
 {
@@ -198,6 +207,7 @@ int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_com
         if (launch_control_enable && !exit_latched && v_front <= LC_CROSSOVER_SPEED_MS &&
             tps_combined >= LC_THROTTLE_TRIGGER) {
             dbg.state = LC_STATE_LAUNCHING_OPENLOOP;
+            dbg.tick_start = current_tick_ms;
         }
         break;
 
@@ -207,15 +217,12 @@ int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_com
         } else if (sensor_ok && v_front > LC_CROSSOVER_SPEED_MS) {
             dbg.state = LC_STATE_LAUNCHING_CLOSEDLOOP;
 
-            int32_t map_t = (int32_t)lc_map_lookup(motor_speed_rpm);
-            dbg.map_torque = map_t;
-
             float error = LC_SLIP_TARGET - dbg.slip_ratio;
             float p_term = LC_KP * error;
             float d_term = -LC_KD * dbg.slip_rate;
 
             float target_i =
-                (float)map_t - (float)driver_torque - p_term - d_term - LC_KI * error * dt;
+                (float)LC_LIMITED_TRACTION_FINAL_TORQUE_NM*10.0f - (float)driver_torque - p_term - d_term - LC_KI * error * dt;
             if (target_i > 0.0f) {
                 target_i = 0.0f;
             }
@@ -230,7 +237,7 @@ int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_com
             exit_latched = 1;
             lc_enter_armed();
         } else if (!sensor_ok) {
-            dbg.state = LC_STATE_LAUNCHING_OPENLOOP;
+            dbg.state = LC_STATE_LAUNCHING_OPENLOOP; //questionable
         }
         break;
     }
@@ -253,9 +260,29 @@ int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_com
         return driver_torque;
 
     case LC_STATE_LAUNCHING_OPENLOOP: {
-        int32_t map_t = (int32_t)lc_map_lookup(motor_speed_rpm);
-        dbg.map_torque = map_t;
-        lc_torque_limit = map_t;
+    	uint32_t tick_current = current_tick_ms;
+    	uint32_t t = tick_current - dbg.tick_start;
+
+    	float ol_torque = 0;
+
+    	if (t <= LC_LASH_TAKEUP_END_MS) {
+    		// small constant preload torque to take up backlash
+    		ol_torque = LC_OPENLOOP_MAX_TORQUE_NM * LC_LASH_TAKEUP_TORQUE_FRAC;
+    	} else if (t <= LC_LIMITED_DRIVELINE_END_MS) {
+    		const float t_stage = (t - LC_LASH_TAKEUP_END_MS) * 0.001f;
+    		// fast ramp through driveline dynamics limited region
+    		ol_torque = LC_LASH_TAKEUP_FINAL_TORQUE_NM + LC_DRIVELINE_RAMP_RATE_NMPS * t_stage;
+    	} else if (t <= LC_LIMITED_TRACTION_END_MS) {
+    		// slow ramp through tire traction limited region
+    		const float t_stage = (t - LC_LIMITED_DRIVELINE_END_MS) * 0.001f;
+    		ol_torque = LC_LIMITED_DRIVELINE_FINAL_TORQUE_NM + LC_TRACTION_RAMP_RATE_NMPS * t_stage;
+    	} else {
+    		// hold until sensor readings reliable
+    		ol_torque = LC_LIMITED_TRACTION_FINAL_TORQUE_NM;
+    	}
+
+    	// convert limit to Nm X10
+    	lc_torque_limit = (int32_t)(ol_torque * 10.0f);
 
         if (sensor_ok && dbg.slip_rate > LC_SLIP_RATE_MAX) {
             lc_torque_limit = (int32_t)((float)lc_torque_limit * LC_SLIP_RATE_CUT_MULT);

@@ -44,6 +44,16 @@
 #define LC_MS_TO_RPM (LC_GEAR_RATIO * 60.0f / (2.0f * 3.14159265f * LC_TIRE_RADIUS_M))
 #define LC_KMH10_TO_MS (1.0f / 36.0f)
 
+// Need to tune
+#define LC_OPENLOOP_MAX_TORQUE_NM 180
+#define LC_LASH_TAKEUP_TORQUE_FRAC 0.1
+#define LC_DRIVELINE_RAMP_RATE_NMPS 1
+#define LC_TRACTION_RAMP_RATE_NMPS 1
+
+#define LC_LASH_TAKEUP_TIME_MS 10
+#define LC_LIMITED_DRIVELINE_TIME_MS 100
+#define LC_LIMITED_TRACTION_TIME_MS 100
+
 typedef enum {
     LC_STATE_ARMED,
     LC_STATE_LAUNCHING_OPENLOOP,
@@ -52,6 +62,7 @@ typedef enum {
 
 typedef struct {
     lc_state_t state;
+    uint32_t tick_start;	/* Tick at which active launch control began (ms) */
     float slip_ratio;       /* Filtered slip ratio */
     float slip_ratio_raw;   /* Unfiltered slip ratio */
     float slip_rate;        /* d(slip)/dt */
