@@ -40,6 +40,11 @@ uint8_t control_bps_oor(float bps_v)
     return bps_v < BPS_FAULT_LOW || bps_v > BPS_FAULT_HIGH;
 }
 
+float control_bps_psi(float bps_v)
+{
+    return calibrate(bps_v, BPS_0PSI_V, BPS_FULL_V) * BPS_FULL_PSI;
+}
+
 uint8_t control_bse(control_t *c, uint8_t brake, float tps)
 {
     if (!c->bse) {
@@ -113,4 +118,15 @@ void control_pack_debug(uint8_t *d, const control_status_t *s)
     d[5] = (int)(p->tps1 * 100) & 0xFF;
     d[6] = (int)(p->tps2 * 100) & 0xFF;
     d[7] = (int)(p->tps * 100) & 0xFF;
+}
+
+void control_pack_bps(uint8_t *d, float psi, uint16_t adc, uint8_t pressed, uint8_t oor)
+{
+    const uint16_t p = (uint16_t)(psi / BPS_CAN_PSI_PER_BIT + 0.5f);
+
+    d[0] = p & 0xFF;
+    d[1] = p >> 8 & 0xFF;
+    d[2] = adc & 0xFF;
+    d[3] = adc >> 8 & 0xFF;
+    d[4] = (uint8_t)((oor << 1) | pressed);
 }

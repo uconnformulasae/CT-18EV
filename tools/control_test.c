@@ -263,6 +263,18 @@ static void test_bps_oor(void)
     check(BPS_FAULT_LOW < BPS_SETPOINT_V, "setpoint above low limit");
 }
 
+static void test_bps_psi(void)
+{
+    printf("test_bps_psi\n");
+
+    check_near(control_bps_psi(BPS_0PSI_V), 0.0f, 0.01f, "zero at 0.5 V");
+    check_near(control_bps_psi(BPS_FULL_V), BPS_FULL_PSI, 0.01f, "full scale at 4.5 V");
+    check_near(control_bps_psi(2.5f), 1000.0f, 0.1f, "midscale");
+    check_near(control_bps_psi(BPS_SETPOINT_V), 100.0f, 0.1f, "brake setpoint");
+    check_near(control_bps_psi(0.3f), 0.0f, 0.01f, "below zero clamps");
+    check_near(control_bps_psi(4.7f), BPS_FULL_PSI, 0.01f, "above full scale clamps");
+}
+
 /* ---- Fault debounce ---- */
 
 static int steps_to_trip(control_t *c, uint32_t dt_ms)
@@ -426,17 +438,40 @@ static void test_pack_debug(void)
     }
 }
 
+static void test_pack_bps(void)
+{
+    printf("test_pack_bps\n");
+    uint8_t d[CAN_BPS_DLC];
+
+    control_pack_bps(d, 1234.56f, 0x0ABC, 0, 0);
+    check_eq(d[0] | d[1] << 8, 12346, "psi x10 little endian, rounds");
+    check_eq(d[2] | d[3] << 8, 0x0ABC, "full 12 bit adc");
+    check_eq(d[4], 0, "no flags");
+
+    control_pack_bps(d, BPS_FULL_PSI, 0x0FFF, 0, 0);
+    check_eq(d[0] | d[1] << 8, 20000, "full scale fits 16 bits");
+    check_eq(d[2] | d[3] << 8, 0x0FFF, "max adc");
+
+    control_pack_bps(d, 0.0f, 0, 1, 0);
+    check_eq(d[0] | d[1] << 8, 0, "zero psi");
+    check_eq(d[4], 0x01, "brake pressed bit");
+    control_pack_bps(d, 0.0f, 0, 0, 1);
+    check_eq(d[4], 0x02, "oor bit");
+}
+
 int main(void)
 {
     test_matches_old();
     test_pedals();
     test_bse();
     test_bps_oor();
+    test_bps_psi();
     test_debounce();
     test_torque_map();
     test_torque_limit();
     test_pack_inverter();
     test_pack_debug();
+    test_pack_bps();
 
     printf("\n%d checks, %d failures\n", checks, failures);
     return failures != 0;
