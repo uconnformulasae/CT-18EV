@@ -60,10 +60,10 @@ DMA_HandleTypeDef hdma_adc3;
 
 CAN_HandleTypeDef hcan;
 
+IWDG_HandleTypeDef hiwdg;
+
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
-
-PCD_HandleTypeDef hpcd_USB_FS;
 
 /* USER CODE BEGIN PV */
 
@@ -75,11 +75,11 @@ static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_CAN_Init(void);
-static void MX_USB_PCD_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_ADC2_Init(void);
 static void MX_ADC3_Init(void);
+static void MX_IWDG_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -113,6 +113,26 @@ volatile uint32_t loop_dt_max_ms = 0;
 
 static uint8_t lc_was_enabled = 0;
 static control_t ctrl;
+static uint8_t reset_cause = 0;
+
+static uint8_t read_reset_cause(void) {
+	uint8_t cause = 0;
+	if (__HAL_RCC_GET_FLAG(RCC_FLAG_PINRST)) {
+		cause |= RESET_CAUSE_PIN;
+	}
+	if (__HAL_RCC_GET_FLAG(RCC_FLAG_PORRST)) {
+		cause |= RESET_CAUSE_POR;
+	}
+	if (__HAL_RCC_GET_FLAG(RCC_FLAG_SFTRST)) {
+		cause |= RESET_CAUSE_SOFT;
+	}
+	if (__HAL_RCC_GET_FLAG(RCC_FLAG_IWDGRST)) {
+		cause |= RESET_CAUSE_IWDG;
+	}
+	/* Flags are sticky until cleared, so the next reset reads fresh */
+	__HAL_RCC_CLEAR_RESET_FLAGS();
+	return cause;
+}
 
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
 	RxHeader.StdId = 0;
@@ -180,6 +200,7 @@ int main(void)
 	for (uint32_t i = 0; i < sizeof(RxData); i++) {
 		RxData[i] = 0;
 	}
+	reset_cause = read_reset_cause();
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -203,7 +224,6 @@ int main(void)
   MX_DMA_Init();
   MX_ADC1_Init();
   MX_CAN_Init();
-  MX_USB_PCD_Init();
   MX_TIM2_Init();
   MX_TIM3_Init();
   MX_ADC2_Init();
@@ -315,6 +335,9 @@ int main(void)
 	HAL_TIM_Base_Start_IT(&htim2);
 	HAL_TIM_Base_Start_IT(&htim3);
 
+	/* Started last so init time doesn't count against the timeout */
+	MX_IWDG_Init();
+
 	uint8_t rtd_raw = 0;
 	uint32_t last_loop_tick = HAL_GetTick();
 	uint32_t version_tick = last_loop_tick - VERSION_TX_MS;
@@ -345,7 +368,9 @@ int main(void)
 		tps_combined = pedals.tps;
 
 		bps = (float) bps_adc * ADC_BPS_V_PER_COUNT;
-		brake_pressed = bps > BPS_SETPOINT_V;
+		/* A shorted sensor must not count as braking for the RTD interlock */
+		const uint8_t bps_oor = control_bps_oor(bps);
+		brake_pressed = bps > BPS_SETPOINT_V && !bps_oor;
 
 		rtd_raw = (HAL_GPIO_ReadPin(PIN_RTD_BUTTON_PORT, PIN_RTD_BUTTON)
 				== PIN_RTD_BUTTON_ACTIVE);
@@ -374,7 +399,7 @@ int main(void)
 		bse_error = control_bse(&ctrl, brake_pressed, tps_combined);
 
 		const uint8_t fault = pedals.tps1_oor || pedals.tps2_oor
-				|| pedals.tps_disagree || bse_error;
+				|| pedals.tps_disagree || bse_error || bps_oor;
 		should_disable_inverter = control_fault_debounce(&ctrl, fault,
 				loop_dt_ms) || !ready_to_drive;
 
@@ -437,8 +462,9 @@ int main(void)
 			can_tx_send(CAN_ID_TX_DEBUG, TxData, 8);
 
 			TxData[0] = (ready_to_drive) & 0x01;
+			TxData[1] = reset_cause;
 
-			can_tx_send(CAN_ID_TX_RTD, TxData, 1);
+			can_tx_send(CAN_ID_TX_RTD, TxData, 2);
 
 			soc_kf_update(HAL_GetTick());
 			{
@@ -458,6 +484,9 @@ int main(void)
 
 			print_ready = 0;
 		}
+
+		/* Only a finished control step feeds the dog */
+		HAL_IWDG_Refresh(&hiwdg);
 
     /* USER CODE END WHILE */
 
@@ -479,13 +508,10 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI|RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
-  RCC_OscInitStruct.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL3;
+  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -504,9 +530,8 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC|RCC_PERIPHCLK_USB;
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
   PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV2;
-  PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_PLL;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
@@ -679,11 +704,11 @@ static void MX_CAN_Init(void)
 
   /* USER CODE END CAN_Init 1 */
   hcan.Instance = CAN1;
-  hcan.Init.Prescaler = 8;
+  hcan.Init.Prescaler = 2;
   hcan.Init.Mode = CAN_MODE_NORMAL;
   hcan.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan.Init.TimeSeg1 = CAN_BS1_2TQ;
-  hcan.Init.TimeSeg2 = CAN_BS2_1TQ;
+  hcan.Init.TimeSeg1 = CAN_BS1_13TQ;
+  hcan.Init.TimeSeg2 = CAN_BS2_2TQ;
   hcan.Init.TimeTriggeredMode = DISABLE;
   hcan.Init.AutoBusOff = ENABLE;
   hcan.Init.AutoWakeUp = ENABLE;
@@ -697,6 +722,36 @@ static void MX_CAN_Init(void)
   /* USER CODE BEGIN CAN_Init 2 */
 
   /* USER CODE END CAN_Init 2 */
+
+}
+
+/**
+  * @brief IWDG Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_IWDG_Init(void)
+{
+
+  /* USER CODE BEGIN IWDG_Init 0 */
+
+  /* USER CODE END IWDG_Init 0 */
+
+  /* USER CODE BEGIN IWDG_Init 1 */
+	/* LSI 40 kHz / 32 * 125 = 100 ms, 67-133 ms over LSI tolerance */
+	/* Hold the dog while the debugger has the core halted */
+	__HAL_DBGMCU_FREEZE_IWDG();
+  /* USER CODE END IWDG_Init 1 */
+  hiwdg.Instance = IWDG;
+  hiwdg.Init.Prescaler = IWDG_PRESCALER_32;
+  hiwdg.Init.Reload = 125;
+  if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN IWDG_Init 2 */
+
+  /* USER CODE END IWDG_Init 2 */
 
 }
 
@@ -791,37 +846,6 @@ static void MX_TIM3_Init(void)
 }
 
 /**
-  * @brief USB Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_USB_PCD_Init(void)
-{
-
-  /* USER CODE BEGIN USB_Init 0 */
-
-  /* USER CODE END USB_Init 0 */
-
-  /* USER CODE BEGIN USB_Init 1 */
-
-  /* USER CODE END USB_Init 1 */
-  hpcd_USB_FS.Instance = USB;
-  hpcd_USB_FS.Init.dev_endpoints = 8;
-  hpcd_USB_FS.Init.speed = PCD_SPEED_FULL;
-  hpcd_USB_FS.Init.low_power_enable = DISABLE;
-  hpcd_USB_FS.Init.lpm_enable = DISABLE;
-  hpcd_USB_FS.Init.battery_charging_enable = DISABLE;
-  if (HAL_PCD_Init(&hpcd_USB_FS) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN USB_Init 2 */
-
-  /* USER CODE END USB_Init 2 */
-
-}
-
-/**
   * Enable DMA controller clock
   */
 static void MX_DMA_Init(void)
@@ -901,10 +925,12 @@ static void MX_GPIO_Init(void)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-	/* User can add his own implementation to report the HAL error return state */
 	__disable_irq();
-	while (1) {
-	}
+	/* Inverter enable is a CAN bit, so going quiet lets its command timeout drop it */
+	HAL_GPIO_WritePin(PIN_RTD_LIGHT_PORT, PIN_RTD_LIGHT, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(PIN_RTD_BUZZER_PORT, PIN_RTD_BUZZER, GPIO_PIN_RESET);
+	/* Retry from scratch, reported as RESET_CAUSE_SOFT on the way back up */
+	NVIC_SystemReset();
   /* USER CODE END Error_Handler_Debug */
 }
 

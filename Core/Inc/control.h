@@ -40,6 +40,9 @@ void control_init(control_t *c);
 /* Calibrate APPS voltages and check them (T.4.2) */
 control_pedals_t control_pedals(control_t *c, float tps1_v, float tps2_v);
 
+/* Brake pressure sensor open or shorted (T.4.3.4) */
+uint8_t control_bps_oor(float bps_v);
+
 /* Brake + throttle latch (EV.4.7): trips at BSE_TRIP_TPS, clears below BSE_CLEAR_TPS */
 uint8_t control_bse(control_t *c, uint8_t brake, float tps);
 

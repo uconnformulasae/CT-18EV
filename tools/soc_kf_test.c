@@ -372,6 +372,196 @@ static void test_temperature_compensation(void)
     }
 }
 
+#define VBAT_GOOD 3600u /* 3.6 V/cell */
+#define VBAT_BAD  1500u /* 1.5 V/cell, below SOC_KF_VCELL_MIN */
+
+/* Frames every 20 ms until end, updating on each 100 ms boundary */
+static void feed_until(uint32_t *t, uint32_t end, int16_t ibat, uint16_t vbat, uint8_t soc_raw)
+{
+    for (; *t < end; *t += 20u) {
+        soc_kf_feed_bms(ibat, vbat, 25, soc_raw, *t);
+        if (*t % 100u == 0u)
+            soc_kf_update(*t);
+    }
+}
+
+static void test_temp_scale_limits(void)
+{
+    printf("test_temp_scale_limits\n");
+    check_near(temp_scale(0), soc_kf_r_temp[0], 1e-6f, "below 10 C holds the coldest scale");
+    check_near(temp_scale(80), soc_kf_r_temp[SOC_KF_TEMP_N_BP - 1], 1e-6f,
+               "above 55 C holds the hottest scale");
+    check_near(temp_scale(25), 1.0f, 1e-6f, "25 C is the reference");
+}
+
+static void test_quiet_before_seed(void)
+{
+    printf("test_quiet_before_seed\n");
+    soc_kf_init();
+    soc_kf_update(1000u);
+    const soc_kf_debug_t *kf = soc_kf_get_debug();
+    check(kf == &s.dbg, "debug view is the live state");
+    check(kf->flags == SOC_KF_FLAG_FROZEN, "no BMS yet: frozen and unseeded");
+    check(!soc_kf_valid(kf), "not valid before any BMS frame");
+
+    /* BMS seen once, then lost before the filter could seed */
+    soc_kf_feed_bms(0, VBAT_GOOD, 25, 120, 2000u);
+    soc_kf_update(2000u + SOC_KF_STALE_MS + 1u);
+    check(kf->flags == SOC_KF_FLAG_FROZEN, "stale before seeding stays unseeded");
+    check(!s.initialised, "no seed from a single stale frame");
+}
+
+static void test_blackout_after_orion_seed(void)
+{
+    printf("test_blackout_after_orion_seed\n");
+    uint32_t t = 0u;
+    soc_kf_init();
+
+    /* Bad voltage blocks OCV and measurements, leaving pure coulomb counting */
+    feed_until(&t, SOC_KF_INIT_TIMEOUT_MS + 200u, 1000, VBAT_BAD, 0);
+    check(s.init_method == 2, "Orion seeds even when the voltage is implausible");
+    check(s.pending_ms > 0u, "frames since the last update are pending");
+
+    const uint32_t quiet = t + SOC_KF_STALE_MS;
+    soc_kf_update(quiet);
+    check((s.dbg.flags & SOC_KF_FLAG_FROZEN) != 0, "frozen once the BMS goes quiet");
+    check((s.dbg.flags & SOC_KF_FLAG_OCV_INIT) == 0, "Orion seed not reported as OCV");
+    check((s.dbg.flags & SOC_KF_FLAG_CLAMPED) != 0, "pending discharge clamps at empty");
+    check_near(s.dbg.soc, 0.0f, 1e-6f, "held at empty");
+
+    const float p00 = s.p00;
+    soc_kf_update(quiet);
+    check(s.p00 == p00, "no time passed, no blackout growth");
+
+    /* Days of silence saturate the covariance rather than run away */
+    soc_kf_update(quiet + 100000000u);
+    check(s.p00 == SOC_KF_P_MAX, "SoC variance capped");
+    check(s.p11 == SOC_KF_P_MAX, "RC variance capped");
+}
+
+static void test_full_pack_clamps(void)
+{
+    printf("test_full_pack_clamps\n");
+    uint32_t t = 0u;
+    soc_kf_init();
+
+    /* Orion past 100% while charging */
+    feed_until(&t, SOC_KF_INIT_TIMEOUT_MS + 200u, -1000, VBAT_BAD, 255);
+    check(s.init_method == 2, "seeded from Orion");
+    check_near(s.dbg.soc, 1.0f, 1e-6f, "Orion above 100% seeds at full");
+    check((s.dbg.flags & SOC_KF_FLAG_CLAMPED) != 0, "charge past full clamps");
+}
+
+static void test_feed_gaps(void)
+{
+    printf("test_feed_gaps\n");
+    soc_kf_init();
+    soc_kf_feed_bms(0, VBAT_GOOD, 25, 120, 0u);
+    soc_kf_feed_bms(0, VBAT_GOOD, 25, 120, 20u);
+    check(s.rest_ms == 20u, "rest accumulates between frames");
+    check(s.pending_ms == 20u, "charge accumulates between frames");
+
+    const uint32_t late = 20u + SOC_KF_STALE_MS + 1u;
+    soc_kf_feed_bms(0, VBAT_GOOD, 25, 120, late);
+    check(s.rest_ms == 0u, "a frame gap restarts the rest timer");
+    check(s.pending_ms == 20u, "the gap itself is not integrated");
+
+    s.rest_ms = 0xFFFF0000u;
+    soc_kf_feed_bms(0, VBAT_GOOD, 25, 120, late + 20u);
+    check(s.rest_ms == 0xFFFF0000u, "rest timer saturates instead of wrapping");
+}
+
+static void test_update_timing(void)
+{
+    printf("test_update_timing\n");
+    uint32_t t = 0u;
+    soc_kf_init();
+    feed_until(&t, SOC_KF_INIT_TIMEOUT_MS + 200u, 400, VBAT_BAD, 120);
+    check(s.initialised, "seeded");
+
+    /* 2 s of frames with no update, at 40 A pack (10 A cell) */
+    soc_kf_update(t);
+    s.v1 = 0.1f;
+    const uint32_t end = t + 2000u;
+    for (t += 20u; t <= end; t += 20u) {
+        soc_kf_feed_bms(400, VBAT_BAD, 25, 120, t);
+    }
+    t -= 20u;
+    soc_kf_update(t);
+    float a = expf(-0.5f / SOC_KF_TAU1_S);
+    float want = a * 0.1f + lut(soc_kf_r1, s.z, 0) * (1.0f - a) * 10.0f;
+    check_near(s.v1, want, 1e-5f, "a long gap between updates counts as 0.5 s");
+
+    /* No frame since the last update: falls back to the latest current */
+    const float v1 = s.v1;
+    soc_kf_update(t + 50u);
+    a = expf(-0.05f / SOC_KF_TAU1_S);
+    want = a * v1 + lut(soc_kf_r1, s.z, 0) * (1.0f - a) * 10.0f;
+    check_near(s.v1, want, 1e-5f, "no pending charge uses the instantaneous current");
+}
+
+static void test_covariance_guards(void)
+{
+    printf("test_covariance_guards\n");
+    run_sim(0.60f, 60.0f, 0.0f, 10.0f, 1, NULL);
+    const uint16_t vbat = (uint16_t)(s.vbat_raw);
+    uint32_t t = 10000u;
+
+    /* Variances that went negative skip the measurement and get floored */
+    const float z = s.z;
+    s.p00 = -1e-3f;
+    s.p11 = -1e-3f;
+    s.p01 = 0.0f;
+    s.p10 = 0.0f;
+    soc_kf_feed_bms(0, vbat, 25, 120, t);
+    soc_kf_update(t);
+    check(s.p00 == SOC_KF_P_FLOOR, "SoC variance floored");
+    check(s.p11 == SOC_KF_P_FLOOR, "RC variance floored");
+    check_near(s.z, z, 1e-6f, "no measurement step without a positive innovation variance");
+
+    /* Correlation past +-sqrt(p00 p11) is pulled back to the boundary */
+    s.p00 = 1e-4f;
+    s.p11 = 1e-4f;
+    s.p01 = 1.0f;
+    s.p10 = 1.0f;
+    t += 20u;
+    soc_kf_feed_bms(0, VBAT_BAD, 25, 120, t);
+    soc_kf_update(t);
+    check_near(s.p01, sqrtf(s.p00 * s.p11), 1e-9f, "positive correlation clamped");
+    check(s.p01 == s.p10, "kept symmetric");
+
+    s.p01 = -1.0f;
+    s.p10 = -1.0f;
+    t += 20u;
+    soc_kf_feed_bms(0, VBAT_BAD, 25, 120, t);
+    soc_kf_update(t);
+    check_near(s.p01, -sqrtf(s.p00 * s.p11), 1e-9f, "negative correlation clamped");
+    check(s.p01 == s.p10, "kept symmetric");
+}
+
+static void test_pack_saturates(void)
+{
+    printf("test_pack_saturates\n");
+    uint8_t d[8];
+    soc_kf_init();
+
+    s.dbg.soc = 7.0f;
+    s.dbg.innovation = 10.0f;
+    s.dbg.charge_ah = 1000.0f;
+    soc_kf_pack_state(d);
+    check((d[0] | d[1] << 8) == 65535, "SoC saturates high");
+    check((int16_t)(uint16_t)(d[2] | d[3] << 8) == 32767, "innovation saturates high");
+    check((int16_t)(uint16_t)(d[4] | d[5] << 8) == 32767, "charge saturates high");
+
+    s.dbg.soc = -0.5f;
+    s.dbg.innovation = -10.0f;
+    s.dbg.charge_ah = -1000.0f;
+    soc_kf_pack_state(d);
+    check((d[0] | d[1] << 8) == 0, "SoC saturates low");
+    check((int16_t)(uint16_t)(d[2] | d[3] << 8) == -32768, "innovation saturates low");
+    check((int16_t)(uint16_t)(d[4] | d[5] << 8) == -32768, "charge saturates low");
+}
+
 int main(void)
 {
     printf("=== soc_kf host tests ===\n\n");
@@ -389,6 +579,14 @@ int main(void)
     test_in_range_garbage_is_gated();
     test_gated_filter_recovers_at_rest();
     test_temperature_compensation();
+    test_temp_scale_limits();
+    test_quiet_before_seed();
+    test_blackout_after_orion_seed();
+    test_full_pack_clamps();
+    test_feed_gaps();
+    test_update_timing();
+    test_covariance_guards();
+    test_pack_saturates();
 
     printf("\n%d checks, %d failures\n", checks, failures);
     return failures ? 1 : 0;

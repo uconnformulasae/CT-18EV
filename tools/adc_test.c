@@ -54,6 +54,11 @@ static void test_init(void)
     check_eq(adc_host_arm_count, 1, "arm count 1");
     check_eq(adc_host_calibrate_count, 1, "calibrate count 1");
     check_eq(adc_host_armed_before_calibration, 0, "calibrated before arm");
+
+    /* The guard has to be able to fire, or the check above proves nothing */
+    adc_host_calibrate_count = 0u;
+    adc_arm();
+    check_eq(adc_host_armed_before_calibration, 1, "guard catches arming before calibration");
 }
 
 static void test_calibration_happens_once(void)

@@ -248,6 +248,21 @@ static void test_bse(void)
     check_eq(control_bse(&c, 1, 0.0f), 0, "clears with brake still on once off throttle");
 }
 
+static void test_bps_oor(void)
+{
+    printf("test_bps_oor\n");
+
+    check_eq(control_bps_oor(0.0f), 1, "open circuit");
+    check_eq(control_bps_oor(BPS_FAULT_LOW - 0.01f), 1, "just under low limit");
+    check_eq(control_bps_oor(BPS_FAULT_LOW), 0, "at low limit");
+    check_eq(control_bps_oor(0.5f), 0, "resting sensor");
+    check_eq(control_bps_oor(BPS_SETPOINT_V + 0.1f), 0, "brake pressed");
+    check_eq(control_bps_oor(BPS_FAULT_HIGH), 0, "at high limit");
+    check_eq(control_bps_oor(BPS_FAULT_HIGH + 0.01f), 1, "just over high limit");
+    check_eq(control_bps_oor(ADC_BPS_VREF_V), 1, "short to supply");
+    check(BPS_FAULT_LOW < BPS_SETPOINT_V, "setpoint above low limit");
+}
+
 /* ---- Fault debounce ---- */
 
 static int steps_to_trip(control_t *c, uint32_t dt_ms)
@@ -416,6 +431,7 @@ int main(void)
     test_matches_old();
     test_pedals();
     test_bse();
+    test_bps_oor();
     test_debounce();
     test_torque_map();
     test_torque_limit();
