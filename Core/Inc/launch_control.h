@@ -57,7 +57,8 @@
 typedef enum {
     LC_STATE_ARMED,
     LC_STATE_LAUNCHING_OPENLOOP,
-    LC_STATE_LAUNCHING_CLOSEDLOOP
+    LC_STATE_LAUNCHING_CLOSEDLOOP,
+	LC_STATE_DONE
 } lc_state_t;
 
 typedef struct {

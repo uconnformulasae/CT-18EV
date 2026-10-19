@@ -164,9 +164,12 @@ int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_com
 
     uint8_t sensor_ok = 1;
     uint32_t elapsed = current_tick_ms - wheel_tick;
+
     if (elapsed > LC_SENSOR_TIMEOUT_MS || wheel_tick == 0) {
-        sensor_ok = 0;
+        // temp comment out for open loop testing
+    	//sensor_ok = 0;
     }
+
     dbg.sensor_healthy = sensor_ok;
 
     float v_rear = motor_rpm_to_wheel_ms(motor_speed_rpm);
@@ -209,6 +212,7 @@ int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_com
             dbg.state = LC_STATE_LAUNCHING_OPENLOOP;
             dbg.tick_start = current_tick_ms;
         }
+
         break;
 
     case LC_STATE_LAUNCHING_OPENLOOP:
@@ -234,12 +238,16 @@ int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_com
         if (!launch_control_enable || tps_combined < LC_THROTTLE_RELEASE) {
             lc_enter_armed();
         } else if (v_front > LC_EXIT_SPEED_MS) {
+        	dbg.state = LC_STATE_DONE;
             exit_latched = 1;
             lc_enter_armed();
         } else if (!sensor_ok) {
-            dbg.state = LC_STATE_LAUNCHING_OPENLOOP; //questionable
+        	// drop to driver control
+            dbg.state = LC_STATE_DONE;
         }
         break;
+    case LC_STATE_DONE:
+    	break;
     }
 
     /* Pass through regen (negative torque) */
@@ -327,6 +335,11 @@ int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_com
         dbg.map_torque = (int32_t)lc_map_lookup(motor_speed_rpm);
         dbg.slip_rate_cut = 0;
         break;
+    case LC_STATE_DONE: {
+    	lc_torque_limit = driver_torque;
+    	break;
+    }
+
     }
     }
 
@@ -336,4 +349,5 @@ int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_com
 
     dbg.lc_torque = lc_torque_limit;
     return lc_torque_limit;
+
 }
