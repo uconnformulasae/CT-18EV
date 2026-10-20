@@ -54,18 +54,18 @@
 
 // Rough guesses based on CT17 Endurance sim config
 #define LC_LASH_TAKEUP_TIME_MS 30
-#define LC_OPENLOOP_TAKEUP_TORQUE_NM 10
-#define LC_OPENLOOP_KNEE_TORQUE_NM 40 // step up to ~90 for testing
-#define LC_OPENLOOP_HOLD_TORQUE_NM 70 // step up to 165 for testing (for mu=1.45, a=0.9g; NOTE: check tune, might be power limited)
+#define LC_OPENLOOP_TAKEUP_TORQUE_NM 10.0f
+#define LC_OPENLOOP_KNEE_TORQUE_NM 40.0f // step up to ~90 for testing
+#define LC_OPENLOOP_HOLD_TORQUE_NM 70.0f // step up to 165 for testing (for mu=1.45, a=0.9g; NOTE: check tune, might be power limited)
 
 #define LC_OPENLOOP_TESTING_MAX_RPM 5000
 
 #else
 
 #define LC_LASH_TAKEUP_TIME_MS 30
-#define LC_OPENLOOP_TAKEUP_TORQUE_NM 10
-#define LC_OPENLOOP_KNEE_TORQUE_NM 18
-#define LC_OPENLOOP_HOLD_TORQUE_NM 33
+#define LC_OPENLOOP_TAKEUP_TORQUE_NM 10.0f
+#define LC_OPENLOOP_KNEE_TORQUE_NM 18.0f
+#define LC_OPENLOOP_HOLD_TORQUE_NM 33.0f
 
 #define LC_OPENLOOP_TESTING_MAX_RPM 2500
 
