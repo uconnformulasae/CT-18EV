@@ -12,7 +12,7 @@ CFLAGS  ?= -O1 -g -Wall -Wextra -I../Core/Inc
 LDLIBS   = -lm
 
 TESTS = soc_kf_test lc_test can_tx_test rtd_test adc_test regen_test regen_off_test \
-        soc_derate_test control_test version_test
+        soc_derate_test control_test version_test inv_tune_test
 
 # Built so they stay compiling, not run (need a log to replay)
 TOOLS = soc_kf_replay
@@ -64,13 +64,17 @@ control_test: control_test.c ../Core/Src/control.c ../Core/Inc/control.h ../Core
 version_test: version_test.c ../Core/Src/version.c ../Core/Inc/version.h
 	$(CC) $(CFLAGS) -o $@ version_test.c $(LDLIBS)
 
+# inv_tune takes ticks and frames from the caller, so it needs no shim.
+inv_tune_test: inv_tune_test.c ../Core/Src/inv_tune.c ../Core/Inc/inv_tune.h ../Core/Inc/inv_tune_params.h
+	$(CC) $(CFLAGS) -o $@ inv_tune_test.c $(LDLIBS)
+
 soc_kf_replay: soc_kf_replay.c ../Core/Src/soc_kf.c ../Core/Inc/soc_kf.h ../Core/Inc/soc_kf_tables.h
 	$(CC) $(CFLAGS) -DSOC_KF_HOST -o $@ soc_kf_replay.c $(LDLIBS)
 
 LLVM_COV      ?= $(shell xcrun -f llvm-cov 2>/dev/null || echo llvm-cov)
 LLVM_PROFDATA ?= $(shell xcrun -f llvm-profdata 2>/dev/null || echo llvm-profdata)
 COV_SRCS = $(addprefix ../Core/Src/,adc.c can_tx.c control.c launch_control.c regen.c rtd.c \
-           soc_derate.c soc_kf.c version.c)
+           soc_derate.c soc_kf.c version.c inv_tune.c)
 
 # Rebuilds instrumented, reports, then cleans so plain builds aren't left instrumented.
 coverage:
