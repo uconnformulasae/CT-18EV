@@ -44,14 +44,49 @@
 #define LC_MS_TO_RPM (LC_GEAR_RATIO * 60.0f / (2.0f * 3.14159265f * LC_TIRE_RADIUS_M))
 #define LC_KMH10_TO_MS (1.0f / 36.0f)
 
+#define LC_OPENLOOP_TESTING
+#define LC_OPENLOOP_STANDS
+
+#define LC_OPENLOOP_ABORT_RAMP_NMPS 1500.0f
+#define LC_OPENLOOP_TESTING_TIMEOUT_MS 700
+
+#ifndef LC_OPENLOOP_STANDS
+
+// Rough guesses based on CT17 Endurance sim config
+#define LC_LASH_TAKEUP_TIME_MS 30
+#define LC_OPENLOOP_TAKEUP_TORQUE_NM 10
+#define LC_OPENLOOP_KNEE_TORQUE_NM 40 // step up to ~90 for testing
+#define LC_OPENLOOP_HOLD_TORQUE_NM 70 // step up to 165 for testing (for mu=1.45, a=0.9g; NOTE: check tune, might be power limited)
+
+#define LC_OPENLOOP_TESTING_MAX_RPM 5000
+
+#else
+
+#define LC_LASH_TAKEUP_TIME_MS 30
+#define LC_OPENLOOP_TAKEUP_TORQUE_NM 10
+#define LC_OPENLOOP_KNEE_TORQUE_NM 18
+#define LC_OPENLOOP_HOLD_TORQUE_NM 33
+
+#define LC_OPENLOOP_TESTING_MAX_RPM 2500
+
+#endif
+
+#define LC_DRIVELINE_RAMP_RATE_NMPS 600
+#define LC_TRACTION_RAMP_RATE_NMPS 300
+
+
+
+
 typedef enum {
     LC_STATE_ARMED,
     LC_STATE_LAUNCHING_OPENLOOP,
-    LC_STATE_LAUNCHING_CLOSEDLOOP
+    LC_STATE_LAUNCHING_CLOSEDLOOP,
+	LC_STATE_DONE
 } lc_state_t;
 
 typedef struct {
     lc_state_t state;
+    uint32_t tick_start;	/* Tick at which active launch control began (ms) */
     float slip_ratio;       /* Filtered slip ratio */
     float slip_ratio_raw;   /* Unfiltered slip ratio */
     float slip_rate;        /* d(slip)/dt */
