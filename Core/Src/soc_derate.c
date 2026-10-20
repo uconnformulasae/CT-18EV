@@ -92,7 +92,8 @@ uint32_t soc_derate_dcl(const soc_kf_debug_t *kf, uint32_t bms_dcl, uint32_t tic
     update_gap(tick_ms, dt_ms);
     dbg.weak_soc = kf->soc - dbg.gap;
 
-    if (soc_kf_valid(kf)) {
+    /* BMS asking for 0 A always wins, otherwise the SoC map owns the limit */
+    if (soc_kf_valid(kf) && bms_dcl > 0u) {
         dbg.dcl = to_amps(interp(&tune->soc, dbg.weak_soc));
         dbg.src = SOC_DERATE_SRC_SOC;
     } else {

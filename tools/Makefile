@@ -1,6 +1,7 @@
 # Host tests for the HAL-independent firmware modules.
 #
 #   make          build and run everything
+#   make coverage line and branch coverage (needs clang and the LLVM tools)
 #   make clean    remove the binaries
 #
 # These run on the build machine, not the target, and are deliberately kept
@@ -10,12 +11,13 @@ CC      ?= cc
 CFLAGS  ?= -O1 -g -Wall -Wextra -I../Core/Inc
 LDLIBS   = -lm
 
-TESTS = soc_kf_test lc_test can_tx_test rtd_test adc_test regen_test soc_derate_test control_test
+TESTS = soc_kf_test lc_test can_tx_test rtd_test adc_test regen_test regen_off_test \
+        soc_derate_test control_test version_test
 
 # Built so they stay compiling, not run (need a log to replay)
 TOOLS = soc_kf_replay
 
-.PHONY: all test clean
+.PHONY: all test coverage clean
 all: test
 
 test: $(TESTS) $(TOOLS)
@@ -47,6 +49,10 @@ can_tx_test: can_tx_test.c ../Core/Src/can_tx.c ../Core/Inc/can_tx.h
 regen_test: regen_test.c ../Core/Src/regen.c ../Core/Inc/regen.h ../Core/Inc/config.h ../Core/Src/soc_kf.c ../Core/Inc/soc_kf.h
 	$(CC) $(CFLAGS) -DSOC_KF_HOST -o $@ regen_test.c $(LDLIBS)
 
+# Same module with REGEN_ENABLE 0, the passthrough build.
+regen_off_test: regen_off_test.c ../Core/Src/regen.c ../Core/Inc/regen.h ../Core/Inc/config.h ../Core/Src/soc_kf.c ../Core/Inc/soc_kf.h
+	$(CC) $(CFLAGS) -DSOC_KF_HOST -o $@ regen_off_test.c $(LDLIBS)
+
 soc_derate_test: soc_derate_test.c ../Core/Src/soc_derate.c ../Core/Inc/soc_derate.h ../Core/Inc/soc_derate_tunes.h ../Core/Inc/config.h ../Core/Src/soc_kf.c ../Core/Inc/soc_kf.h ../Core/Inc/soc_kf_tables.h
 	$(CC) $(CFLAGS) -DSOC_KF_HOST -o $@ soc_derate_test.c $(LDLIBS)
 
@@ -54,8 +60,28 @@ soc_derate_test: soc_derate_test.c ../Core/Src/soc_derate.c ../Core/Inc/soc_dera
 control_test: control_test.c ../Core/Src/control.c ../Core/Inc/control.h ../Core/Inc/config.h
 	$(CC) $(CFLAGS) -o $@ control_test.c $(LDLIBS)
 
+# version has no HAL dependency; uses build_version.h when version.sh has run.
+version_test: version_test.c ../Core/Src/version.c ../Core/Inc/version.h
+	$(CC) $(CFLAGS) -o $@ version_test.c $(LDLIBS)
+
 soc_kf_replay: soc_kf_replay.c ../Core/Src/soc_kf.c ../Core/Inc/soc_kf.h ../Core/Inc/soc_kf_tables.h
 	$(CC) $(CFLAGS) -DSOC_KF_HOST -o $@ soc_kf_replay.c $(LDLIBS)
 
+LLVM_COV      ?= $(shell xcrun -f llvm-cov 2>/dev/null || echo llvm-cov)
+LLVM_PROFDATA ?= $(shell xcrun -f llvm-profdata 2>/dev/null || echo llvm-profdata)
+COV_SRCS = $(addprefix ../Core/Src/,adc.c can_tx.c control.c launch_control.c regen.c rtd.c \
+           soc_derate.c soc_kf.c version.c)
+
+# Rebuilds instrumented, reports, then cleans so plain builds aren't left instrumented.
+coverage:
+	$(MAKE) clean
+	$(MAKE) $(TESTS) CC=clang CFLAGS="$(CFLAGS) -fprofile-instr-generate -fcoverage-mapping"
+	rm -rf cov && mkdir cov
+	for t in $(TESTS); do LLVM_PROFILE_FILE=cov/$$t.profraw ./$$t > /dev/null || exit 1; done
+	$(LLVM_PROFDATA) merge -o cov/all.profdata cov/*.profraw
+	$(LLVM_COV) report -show-branch-summary -instr-profile cov/all.profdata $(firstword $(TESTS)) \
+		$(addprefix -object ,$(wordlist 2,$(words $(TESTS)),$(TESTS))) $(COV_SRCS)
+	$(MAKE) clean
+
 clean:
-	rm -rf $(TESTS) $(TOOLS) *.dSYM
+	rm -rf $(TESTS) $(TOOLS) *.dSYM cov

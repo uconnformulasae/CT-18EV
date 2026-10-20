@@ -403,6 +403,8 @@ static void test_pack(void)
     check_eq(d[0], 0, "not cut");
     check_eq(d[1], 100, "soc scale");
     check_eq(d[2], 43, "max regen (Nm)");
+    check(regen_get_debug() == &dbg, "debug accessor");
+    check_eq(regen_get_debug()->cut, d[0], "accessor matches the frame");
     for (int i = REGEN_DEBUG_DLC; i < 8; i++) {
         check_eq(d[i], 0xAA, "nothing written past dlc");
     }
