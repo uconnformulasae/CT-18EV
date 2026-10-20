@@ -51,8 +51,8 @@
 #define LC_OPENLOOP_KNEE_TORQUE_NM 90
 #define LC_OPENLOOP_HOLD_TORQUE_NM 165 // for mu=1.45, a=0.9g; NOTE: check tune, might be power limited
 
-#define LC_DRIVELINE_RAMP_RATE_NMPS 300
-#define LC_TRACTION_RAMP_RATE_NMPS 1000
+#define LC_DRIVELINE_RAMP_RATE_NMPS 1000
+#define LC_TRACTION_RAMP_RATE_NMPS 300
 
 typedef enum {
     LC_STATE_ARMED,
