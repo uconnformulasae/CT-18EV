@@ -133,8 +133,10 @@ void lc_init(void)
 
 void lc_feed_wheel_speed(uint16_t front_left_speed_x10)
 {
-    front_wheel_speed_ms = (float)front_left_speed_x10 * LC_KMH10_TO_MS;
-    last_wheel_speed_tick = current_tick_ms;
+#ifndef LC_OPENLOOP_TESTING
+	front_wheel_speed_ms = (float)front_left_speed_x10 * LC_KMH10_TO_MS;
+	    last_wheel_speed_tick = current_tick_ms;
+#endif
 }
 
 void lc_feed_tick(uint32_t tick_ms)
@@ -226,13 +228,7 @@ int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_com
     case LC_STATE_LAUNCHING_OPENLOOP:
         if (!launch_control_enable || tps_combined < LC_THROTTLE_RELEASE) {
             lc_enter_armed();
-        } else if (
-#ifndef LC_OPENLOOP_TESTING
-		  sensor_ok && v_front > LC_CROSSOVER_SPEED_MS
-#else
-		  0
-#endif
-) {
+        } else if (sensor_ok && v_front > LC_CROSSOVER_SPEED_MS) {
             dbg.state = LC_STATE_LAUNCHING_CLOSEDLOOP;
 
             float error = LC_SLIP_TARGET - dbg.slip_ratio;
@@ -279,10 +275,23 @@ int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_com
 
     switch (dbg.state) {
 
-    case LC_STATE_ARMED:
-        dbg.map_torque = driver_torque;
-        dbg.lc_torque = driver_torque;
-        return driver_torque;
+    case LC_STATE_ARMED: {
+    	 int32_t out = driver_torque;
+
+		// if enabled and stationary, hold the preload torque
+		if (launch_control_enable && !exit_latched &&
+			v_front <= LC_CROSSOVER_SPEED_MS) {
+			int32_t staging_cap = (int32_t)(LC_OPENLOOP_TAKEUP_TORQUE_NM * 10.0f);
+
+			if (out > staging_cap) {
+				out = staging_cap;
+			}
+		}
+
+		dbg.map_torque = driver_torque;
+		dbg.lc_torque = out;
+		return out;
+    }
 
     case LC_STATE_LAUNCHING_OPENLOOP: {
     	uint32_t tick_current = current_tick_ms;
@@ -366,11 +375,11 @@ int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_com
         dbg.map_torque = (int32_t)lc_map_lookup(motor_speed_rpm);
         dbg.slip_rate_cut = 0;
         break;
+    }
+
     case LC_STATE_DONE: {
     	lc_torque_limit = driver_torque;
     	break;
-    }
-
     }
     }
 
