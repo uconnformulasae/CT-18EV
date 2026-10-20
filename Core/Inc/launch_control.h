@@ -44,14 +44,33 @@
 #define LC_MS_TO_RPM (LC_GEAR_RATIO * 60.0f / (2.0f * 3.14159265f * LC_TIRE_RADIUS_M))
 #define LC_KMH10_TO_MS (1.0f / 36.0f)
 
+#define LC_OPENLOOP_TESTING
+
+#ifndef LC_OPENLOOP_TESTING
+
 // Rough guesses based on CT17 Endurance sim config
-#define LC_LASH_TAKEUP_TIME_MS 10
+#define LC_LASH_TAKEUP_TIME_MS 30
 #define LC_OPENLOOP_TAKEUP_TORQUE_NM 10
 #define LC_OPENLOOP_KNEE_TORQUE_NM 90
 #define LC_OPENLOOP_HOLD_TORQUE_NM 165 // for mu=1.45, a=0.9g; NOTE: check tune, might be power limited
 
+#define LC_OPENLOOP_TESTING_TIMEOUT_MS 700
+#define LC_OPENLOOP_TESTING_MAX_RPM 2500
+
+#else
+
+#define LC_LASH_TAKEUP_TIME_MS 30
+#define LC_OPENLOOP_TAKEUP_TORQUE_NM 10
+#define LC_OPENLOOP_KNEE_TORQUE_NM 18
+#define LC_OPENLOOP_HOLD_TORQUE_NM 33
+
+#endif
+
 #define LC_DRIVELINE_RAMP_RATE_NMPS 600
 #define LC_TRACTION_RAMP_RATE_NMPS 300
+
+
+
 
 typedef enum {
     LC_STATE_ARMED,

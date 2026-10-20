@@ -4,6 +4,8 @@
 
 volatile uint8_t launch_control_enable = 0;
 
+static uint8_t ol_abort = 0;
+
 #define LC_MAP_SIZE 8
 
 static const uint16_t lc_map_rpm[LC_MAP_SIZE] = {0, 0, 0, 0, 0, 0, 0, 0};
@@ -97,12 +99,16 @@ static void lc_reset_pid(void)
 
 static void lc_enter_armed(void)
 {
+	ol_abort = 0;
+
     dbg.state = LC_STATE_ARMED;
     lc_reset_pid();
 }
 
 void lc_init(void)
 {
+	ol_abort = 0;
+
     dbg.state = LC_STATE_ARMED;
     dbg.slip_ratio = 0.0f;
     dbg.slip_ratio_raw = 0.0f;
@@ -169,8 +175,7 @@ int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_com
     uint32_t elapsed = current_tick_ms - wheel_tick;
 
     if (elapsed > LC_SENSOR_TIMEOUT_MS || wheel_tick == 0) {
-        // temp comment out for open loop testing
-    	//sensor_ok = 0;
+    	sensor_ok = 0;
     }
 
     dbg.sensor_healthy = sensor_ok;
@@ -244,10 +249,13 @@ int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_com
         	dbg.state = LC_STATE_DONE;
             exit_latched = 1;
             lc_enter_armed();
-        } else if (!sensor_ok) {
+        }
+#ifndef LC_OPENLOOP_TESTING
+        else if (!sensor_ok) {
         	// drop to driver control
             dbg.state = LC_STATE_DONE;
         }
+#endif
         break;
     case LC_STATE_DONE:
     	break;
@@ -274,6 +282,16 @@ int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_com
     	uint32_t tick_current = current_tick_ms;
     	uint32_t t = tick_current - dbg.tick_start;
 
+#ifdef LC_OPENLOOP_TESTING
+		if (t > LC_OPENLOOP_TESTING_TIMEOUT_MS ||
+			motor_speed_rpm > LC_OPENLOOP_TESTING_MAX_RPM) {
+			ol_abort = 1;
+		}
+		if (ol_abort) {
+			ol_torque = 0.0f;  // stay latched until throttle release re-arms
+		}
+#endif
+
     	float ol_torque = 0;
 
     	if (t <= LC_LASH_TAKEUP_END_MS) {
@@ -295,12 +313,14 @@ int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_com
     	// convert limit to Nm X10
     	lc_torque_limit = (int32_t)(ol_torque * 10.0f);
 
+#ifndef LC_OPENLOOP_TESTING
         if (sensor_ok && dbg.slip_rate > LC_SLIP_RATE_MAX) {
             lc_torque_limit = (int32_t)((float)lc_torque_limit * LC_SLIP_RATE_CUT_MULT);
             dbg.slip_rate_cut = 1;
         } else {
             dbg.slip_rate_cut = 0;
         }
+#endif
         break;
     }
 
