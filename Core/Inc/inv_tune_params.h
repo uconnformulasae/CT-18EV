@@ -4,13 +4,13 @@
 #include <stdint.h>
 
 /*
- * CAN parameter addresses (CAN Protocol V6.3, 2.3.4), in RMS GUI export order.
- * Frame n slot m is entry 4n + m, so changing the order moves AiM channels.
+ * CAN parameter addresses (CAN Protocol V6.3 2.3.4, CM SW manual 0A-0163-02),
+ * in RMS GUI export order. Frame n slot m is entry 4n + m, so only ever
+ * append; reordering moves AiM channels.
  *
- * Not in the protocol doc, so not read: Angle_Advance_Factor, Amp_Hours,
- * Valet_Mode_Speed, Brake_Thresh_Lo/Hi, U2C_Enable/Setpoint, LV_Indicator
- * Threshold/Hysteresis, Analog_Input_Pull_Up_Control, DCLink_FW_Reg_Use,
- * Active_Short_Circuit Enabled/Delay/User_Off, User_EEPROM_1-3.
+ * In neither doc, so not read: Angle_Advance_Factor, Amp_Hours,
+ * Valet_Mode_Speed, U2C_Enable/Setpoint, LV_Indicator Threshold/Hysteresis,
+ * User_EEPROM_1-3.
  */
 static const uint16_t inv_tune_addrs[] = {
     174, /* Serial_Number */
@@ -98,6 +98,13 @@ static const uint16_t inv_tune_addrs[] = {
     185, /* Regen_Ramp_Rate (s) x1000 */
     186, /* Brake_Pedal_Flipped */
     251, /* Self_Sense_Assist_Enabled */
+    256, /* Brake_Thresh_Lo (V) x100 */
+    257, /* Brake_Thresh_Hi (V) x100 */
+    22,  /* Analog_Input_Pull_Up_Control, live value, general parameter */
+    286, /* DCLink_FW_Reg_Use */
+    283, /* Active_Short_Circuit_Enabled */
+    284, /* Active_Short_Circuit_Delay (us) */
+    285, /* Active_Short_Circuit_User_Off */
 };
 
 #endif /* INV_TUNE_PARAMS_H */

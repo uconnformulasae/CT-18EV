@@ -13,7 +13,7 @@
 #define INV_TUNE_LOST_MS   1000u /* 0x0AA silence that counts as an inverter restart */
 #define INV_TUNE_REPLY_MS  50u
 #define INV_TUNE_RETRIES   3u
-#define INV_TUNE_TX_MS     20u /* Per frame, full rotation must stay under 500 ms for the AiM */
+#define INV_TUNE_TX_MS     16u /* Per frame, full rotation must stay under 500 ms for the AiM */
 
 #define INV_TUNE_MISSING 0x8000u /* Sent for a parameter that never answered */
 

@@ -111,13 +111,15 @@ static void test_table(void)
 {
     printf("test_table\n");
 
-    check_eq(inv_tune_count(), 85, "every documented export parameter");
-    check_eq(inv_tune_frames(), 22, "4 parameters per frame");
+    check_eq(inv_tune_count(), 92, "every documented export parameter");
+    check_eq(inv_tune_frames(), 23, "4 parameters per frame");
+    check_eq(inv_tune_addrs[84], 251, "original 85 keep their slots");
 
     uint8_t unique = 1u;
     uint8_t in_range = 1u;
     for (uint8_t i = 0; i < inv_tune_count(); i++) {
-        if (inv_tune_addrs[i] < 100u || inv_tune_addrs[i] > 499u) {
+        /* 22 is the AIN pull-up, a general parameter */
+        if ((inv_tune_addrs[i] < 100u || inv_tune_addrs[i] > 499u) && inv_tune_addrs[i] != 22u) {
             in_range = 0u;
         }
         for (uint8_t j = 0; j < i; j++) {
@@ -131,6 +133,8 @@ static void test_table(void)
 
     const uint32_t rotation_ms = (inv_tune_frames() + 1u) * INV_TUNE_TX_MS;
     check(rotation_ms < 500u, "every frame repeats faster than the AiM timeout");
+    /* Room for the 10 export parameters still without an address */
+    check((26u + 1u) * INV_TUNE_TX_MS < 500u, "full export still fits the AiM timeout");
     check(INV_TUNE_CAN_ID_BASE + inv_tune_frames() - 1u <= 0x57F, "tune IDs stay in 0x56x-0x57x");
 }
 
@@ -346,7 +350,8 @@ static void test_frames(void)
         if (f < inv_tune_frames() - 1u) {
             check_eq(dlc, 8, "full frame");
         } else {
-            check_eq(dlc, 2, "last frame holds one parameter");
+            check_eq(dlc, 2 * (inv_tune_count() - 4 * (inv_tune_frames() - 1)),
+                     "last frame holds what is left");
         }
     }
     uint8_t each_once = 1u;
