@@ -226,7 +226,13 @@ int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_com
     case LC_STATE_LAUNCHING_OPENLOOP:
         if (!launch_control_enable || tps_combined < LC_THROTTLE_RELEASE) {
             lc_enter_armed();
-        } else if (sensor_ok && v_front > LC_CROSSOVER_SPEED_MS) {
+        } else if (
+#ifndef LC_OPENLOOP_TESTING
+		  sensor_ok && v_front > LC_CROSSOVER_SPEED_MS
+#else
+		  0
+#endif
+) {
             dbg.state = LC_STATE_LAUNCHING_CLOSEDLOOP;
 
             float error = LC_SLIP_TARGET - dbg.slip_ratio;
@@ -282,16 +288,6 @@ int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_com
     	uint32_t tick_current = current_tick_ms;
     	uint32_t t = tick_current - dbg.tick_start;
 
-#ifdef LC_OPENLOOP_TESTING
-		if (t > LC_OPENLOOP_TESTING_TIMEOUT_MS ||
-			motor_speed_rpm > LC_OPENLOOP_TESTING_MAX_RPM) {
-			ol_abort = 1;
-		}
-		if (ol_abort) {
-			ol_torque = 0.0f;  // stay latched until throttle release re-arms
-		}
-#endif
-
     	float ol_torque = 0;
 
     	if (t <= LC_LASH_TAKEUP_END_MS) {
@@ -309,6 +305,18 @@ int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_com
     		// hold until sensor readings reliable
     		ol_torque = LC_LIMITED_TRACTION_FINAL_TORQUE_NM;
     	}
+
+#ifdef LC_OPENLOOP_TESTING
+    if (!ol_abort &&
+        (t > LC_OPENLOOP_TESTING_TIMEOUT_MS ||
+         motor_speed_rpm > LC_OPENLOOP_TESTING_MAX_RPM)) {
+        ol_abort = 1;
+    }
+    if (ol_abort) {
+        const float prev_nm = fmaxf((float)dbg.lc_torque * 0.1f, 0.0f);
+        ol_torque = fmaxf(prev_nm - LC_OPENLOOP_ABORT_RAMP_NMPS * dt, 0.0f);
+    }
+#endif
 
     	// convert limit to Nm X10
     	lc_torque_limit = (int32_t)(ol_torque * 10.0f);
