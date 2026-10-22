@@ -16,7 +16,6 @@
 
 #define TPS2_0PER   0.800f
 #define TPS2_100PER 1.79f
-
 /* APPS out-of-range thresholds (V) */
 #define TPS1_FAULT_LOW  0.2f
 #define TPS1_FAULT_HIGH 2.8f
