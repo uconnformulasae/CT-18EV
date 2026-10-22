@@ -1,0 +1,243 @@
+VERSION ""
+
+NS_ :
+    CM_
+    BA_DEF_
+    BA_
+    VAL_
+    BA_DEF_DEF_
+
+BS_:
+
+BU_: LVCU INV BMS AIM
+
+BO_ 162 INV_Temperatures3: 8 INV
+ SG_ Coolant_Temp : 0|16@1- (0.1,0) [-3276.8|3276.7] "degC" AIM
+ SG_ Hot_Spot_Temp : 16|16@1- (0.1,0) [-3276.8|3276.7] "degC" AIM
+ SG_ Motor_Temp : 32|16@1- (0.1,0) [-3276.8|3276.7] "degC" AIM
+ SG_ Torque_Shudder : 48|16@1- (0.1,0) [-3276.8|3276.7] "Nm" AIM
+
+BO_ 165 INV_MotorPosition: 8 INV
+ SG_ Motor_Angle : 0|16@1+ (0.1,0) [0|6553.5] "deg" AIM
+ SG_ RPM : 16|16@1- (1,0) [-32768|32767] "rpm" LVCU,AIM
+ SG_ Electrical_Freq : 32|16@1- (0.1,0) [-3276.8|3276.7] "Hz" AIM
+ SG_ Delta_Resolver_Filtered : 48|16@1- (0.1,0) [-3276.8|3276.7] "deg" AIM
+
+BO_ 166 INV_Current: 8 INV
+ SG_ Phase_A_Current : 0|16@1- (0.1,0) [-3276.8|3276.7] "A" AIM
+ SG_ Phase_B_Current : 16|16@1- (0.1,0) [-3276.8|3276.7] "A" AIM
+ SG_ Phase_C_Current : 32|16@1- (0.1,0) [-3276.8|3276.7] "A" AIM
+ SG_ MCU_DC_Current : 48|16@1- (0.1,0) [-3276.8|3276.7] "A" AIM
+
+BO_ 168 INV_Flux: 8 INV
+ SG_ Flux_Command : 0|16@1- (0.001,0) [-32.768|32.767] "Wb" AIM
+ SG_ Flux_Feedback : 16|16@1- (0.001,0) [-32.768|32.767] "Wb" AIM
+ SG_ Id_Feedback : 32|16@1- (0.1,0) [-3276.8|3276.7] "A" AIM
+ SG_ Iq_Feedback : 48|16@1- (0.1,0) [-3276.8|3276.7] "A" AIM
+
+BO_ 170 INV_InternalStates: 8 INV
+ SG_ VSM_State : 0|8@1+ (1,0) [0|255] "" AIM
+ SG_ Inv_PWM_Freq : 8|8@1+ (1,0) [0|255] "kHz" AIM
+ SG_ Inverter_State : 16|8@1+ (1,0) [0|255] "" AIM
+ SG_ Relay_1 : 24|1@1+ (1,0) [0|1] "" AIM
+ SG_ Relay_2 : 25|1@1+ (1,0) [0|1] "" AIM
+ SG_ Relay_3 : 26|1@1+ (1,0) [0|1] "" AIM
+ SG_ Relay_4 : 27|1@1+ (1,0) [0|1] "" AIM
+ SG_ Relay_5 : 28|1@1+ (1,0) [0|1] "" AIM
+ SG_ Relay_6 : 29|1@1+ (1,0) [0|1] "" AIM
+ SG_ Inv_Run_Mode_State : 32|1@1+ (1,0) [0|1] "" AIM
+ SG_ Self_Sense_Active : 33|1@1+ (1,0) [0|1] "" AIM
+ SG_ Active_Discharge_State : 37|3@1+ (1,0) [0|7] "" AIM
+ SG_ Inv_Cmd_Mode_State : 40|1@1+ (1,0) [0|1] "" AIM
+ SG_ Inv_Rolling_Counter : 44|4@1+ (1,0) [0|15] "" AIM
+ SG_ Inv_Enable_State : 48|1@1+ (1,0) [0|1] "" AIM
+ SG_ Burst_Model_Mode : 49|1@1+ (1,0) [0|1] "" AIM
+ SG_ Start_Mode_Active : 54|1@1+ (1,0) [0|1] "" AIM
+ SG_ Inv_Enable_Lockout : 55|1@1+ (1,0) [0|1] "" AIM
+ SG_ Inv_Direction : 56|1@1+ (1,0) [0|1] "" AIM
+ SG_ BMS_Active : 57|1@1+ (1,0) [0|1] "" AIM
+ SG_ BMS_Limiting_Torque : 58|1@1+ (1,0) [0|1] "" AIM
+ SG_ Limit_Max_Speed : 59|1@1+ (1,0) [0|1] "" AIM
+ SG_ Limit_Hot_Spot : 60|1@1+ (1,0) [0|1] "" AIM
+ SG_ Low_Speed_Limiting : 61|1@1+ (1,0) [0|1] "" AIM
+ SG_ Coolant_Temp_Limiting : 62|1@1+ (1,0) [0|1] "" AIM
+ SG_ Limit_Stall_Burst : 63|1@1+ (1,0) [0|1] "" AIM
+
+BO_ 171 INV_Faults: 8 INV
+ SG_ PostFaultB0 : 0|8@1+ (1,0) [0|255] "" AIM
+ SG_ PostFaultB1 : 8|8@1+ (1,0) [0|255] "" AIM
+ SG_ PostFaultB2 : 16|8@1+ (1,0) [0|255] "" AIM
+ SG_ PostFaultB3 : 24|8@1+ (1,0) [0|255] "" AIM
+ SG_ InvRunFaultB4 : 32|8@1+ (1,0) [0|255] "" AIM
+ SG_ InvRunFaultB5 : 40|8@1+ (1,0) [0|255] "" AIM
+ SG_ InvRunFaultB6 : 48|8@1+ (1,0) [0|255] "" AIM
+ SG_ InvRunFaultB7 : 56|8@1+ (1,0) [0|255] "" AIM
+
+BO_ 172 INV_TorqueTimer: 8 INV
+ SG_ Torque_Command : 0|16@1- (0.1,0) [-3276.8|3276.7] "Nm" AIM
+ SG_ Torque_Feedback : 16|16@1- (0.1,0) [-3276.8|3276.7] "Nm" AIM
+ SG_ Power_On_Timer : 32|32@1+ (0.003,0) [0|12884901.885] "s" AIM
+
+BO_ 177 INV_TorqueCapability: 8 INV
+ SG_ MCU_Torque_Limit : 0|16@1- (0.1,0) [-3276.8|3276.7] "Nm" AIM
+
+BO_ 192 LVCU_InverterCmd: 8 LVCU
+ SG_ LVCU_Torque_Req : 0|16@1- (0.1,0) [-3276.8|3276.7] "Nm" AIM
+ SG_ Direction_Cmd : 32|1@1+ (1,0) [0|1] "" AIM
+ SG_ Inverter_Enable_Cmd : 40|1@1+ (1,0) [0|1] "" AIM
+ SG_ Cmd_Rolling_Counter : 44|4@1+ (1,0) [0|15] "" AIM
+
+BO_ 514 BMS_Limits: 8 BMS
+ SG_ BMS_Disch_Lim : 0|16@1+ (1,0) [0|65535] "A" LVCU,AIM
+
+BO_ 1365 LVCU_Debug: 8 LVCU
+ SG_ RTD_Timeout : 0|8@1+ (1,0) [0|255] "" AIM
+ SG_ BSE_Voltage : 8|8@1+ (0.01953601954,0) [0|4.981684982] "V" AIM
+ SG_ TPS_1_Voltage : 16|8@1+ (0.01289377289,0) [0|3.287912088] "V" AIM
+ SG_ TPS_2_Voltage : 24|8@1+ (0.01289377289,0) [0|3.287912088] "V" AIM
+ SG_ LVCU_Status : 32|8@1+ (1,0) [0|255] "" AIM
+ SG_ TPS_1 : 40|8@1+ (1,0) [0|255] "%" AIM
+ SG_ TPS_2 : 48|8@1+ (1,0) [0|255] "%" AIM
+ SG_ Throttle_Pos : 56|8@1+ (1,0) [0|255] "%" AIM
+
+BO_ 1366 LVCU_Rtd: 2 LVCU
+ SG_ RTD_Active : 0|1@1+ (1,0) [0|1] "" AIM
+ SG_ Reset_Pin : 8|1@1+ (1,0) [0|1] "" AIM
+ SG_ Reset_Power_On : 9|1@1+ (1,0) [0|1] "" AIM
+ SG_ Reset_Software : 10|1@1+ (1,0) [0|1] "" AIM
+ SG_ Reset_Watchdog : 11|1@1+ (1,0) [0|1] "" AIM
+
+BO_ 1368 LVCU_SocKf: 8 LVCU
+ SG_ KF_SOC : 0|16@1+ (0.01,0) [0|100] "%" AIM
+ SG_ Innovation : 16|16@1- (0.0001,0) [-3.2768|3.2767] "V" AIM
+ SG_ Cumulative_Charge : 32|16@1- (0.01,0) [-327.68|327.67] "Ah" AIM
+ SG_ KF_Init : 48|1@1+ (1,0) [0|1] "" AIM
+ SG_ KF_OCV_Init : 49|1@1+ (1,0) [0|1] "" AIM
+ SG_ KF_BMS_Live : 50|1@1+ (1,0) [0|1] "" AIM
+ SG_ KF_Gated : 51|1@1+ (1,0) [0|1] "" AIM
+ SG_ KF_Frozen : 52|1@1+ (1,0) [0|1] "" AIM
+ SG_ KF_Clamped : 53|1@1+ (1,0) [0|1] "" AIM
+ SG_ KF_VBad : 54|1@1+ (1,0) [0|1] "" AIM
+ SG_ Loop_dt_Max : 56|8@1+ (1,0) [0|255] "ms" AIM
+
+BO_ 1370 LVCU_SocDerate: 8 LVCU
+ SG_ Derate_Tune : 0|8@1+ (1,0) [0|255] "" AIM
+ SG_ DCL_Source : 8|1@1+ (1,0) [0|1] "" AIM
+ SG_ DCL_Cell_Live : 9|1@1+ (1,0) [0|1] "" AIM
+ SG_ DCL_Temp_Limited : 10|1@1+ (1,0) [0|1] "" AIM
+ SG_ Active_DCL : 16|16@1+ (1,0) [0|65535] "A" AIM
+ SG_ Weak_Cell_SOC : 32|16@1+ (0.01,0) [0|100] "%" AIM
+ SG_ Cell_SOC_Gap : 48|16@1+ (0.01,0) [0|100] "%" AIM
+
+BO_ 1371 LVCU_Version: 5 LVCU
+ SG_ Version_Hi : 0|16@1+ (1,0) [0|65535] "" AIM
+ SG_ Version_Lo : 16|16@1+ (1,0) [0|65535] "" AIM
+ SG_ Version_Flags : 32|8@1+ (1,0) [0|255] "" AIM
+
+BO_ 1372 LVCU_BrakePressure: 5 LVCU
+ SG_ LVCU_Brakes : 0|16@1+ (0.1,0) [0|6553.5] "psi" AIM
+ SG_ BPS_ADC : 16|16@1+ (1,0) [0|4095] "" AIM
+ SG_ Brake_Pressed : 32|1@1+ (1,0) [0|1] "" AIM
+ SG_ BPS_Out_Of_Range : 33|1@1+ (1,0) [0|1] "" AIM
+
+BO_ 1373 LVCU_InvTuneStatus: 7 LVCU
+ SG_ InvTune_State : 0|8@1+ (1,0) [0|4] "" AIM
+ SG_ InvTune_Missing : 16|8@1+ (1,0) [0|255] "" AIM
+ SG_ InvTune_CRC : 32|16@1+ (1,0) [0|65535] "" AIM
+
+BO_ 1376 LVCU_InvTuneValue: 4 LVCU
+ SG_ InvTune_Addr : 0|16@1+ (1,0) [0|65535] "" AIM
+ SG_ InvTune_Value : 16|16@1+ (1,0) [0|65535] "" AIM
+
+BO_ 1536 BMS_Status: 8 BMS
+ SG_ BMS_Bit0 : 0|1@1+ (1,0) [0|1] "" AIM
+ SG_ State_of_Charge : 8|8@1+ (0.5,0) [0|127.5] "%" LVCU,AIM
+ SG_ Pack_Temp : 16|8@1- (1,0) [-128|127] "degC" LVCU,AIM
+ SG_ BMS_LV_Input : 24|8@1+ (1,0) [0|255] "" AIM
+ SG_ Pack_Voltage : 32|16@1+ (0.1,0) [0|6553.5] "V" LVCU,AIM
+ SG_ Pack_Current : 48|16@1- (0.1,0) [-3276.8|3276.7] "A" LVCU,AIM
+
+BO_ 1951 BMS_Cells: 8 BMS
+ SG_ Min_Cell_Voltage : 8|16@1+ (1,0) [0|65535] "" AIM
+ SG_ Low_Opencell_Voltage : 32|16@1+ (0.0001,0) [0|6.5535] "V" LVCU,AIM
+ SG_ Avg_Opencell_Voltage : 48|16@1+ (0.0001,0) [0|6.5535] "V" LVCU,AIM
+
+CM_ "CT-18EV CAN as logged by the AiM once ct18ev_aim_merge.dbc is in. Everything on the bus except 0x0C1/0x0C2 (covered by the tune frames) and 0x300 (the AiM own wheel speed).";
+CM_ BO_ 162 "Temperatures #3";
+CM_ SG_ 162 Torque_Shudder "Shudder compensation torque";
+CM_ BO_ 165 "Motor position";
+CM_ SG_ 165 Motor_Angle "Electrical";
+CM_ BO_ 166 "Current information";
+CM_ BO_ 168 "Flux information";
+CM_ BO_ 170 "Internal states";
+CM_ SG_ 170 Inv_Run_Mode_State "0 torque, 1 speed";
+CM_ SG_ 170 Inv_Cmd_Mode_State "0 CAN, 1 VSM";
+CM_ SG_ 170 Inv_Rolling_Counter "Value the inverter expects next";
+CM_ SG_ 170 Burst_Model_Mode "0 stall, 1 high speed";
+CM_ SG_ 170 Inv_Enable_Lockout "1 = cannot be enabled until a disable command is seen";
+CM_ SG_ 170 Inv_Direction "1 forward";
+CM_ BO_ 171 "POST faults bytes 0-3, run faults bytes 4-7";
+CM_ BO_ 172 "Torque and timer";
+CM_ SG_ 172 Power_On_Timer "Since the inverter powered up";
+CM_ BO_ 177 "Torque capability";
+CM_ BO_ 192 "Torque command to the inverter";
+CM_ SG_ 192 Direction_Cmd "1 = forward";
+CM_ SG_ 192 Cmd_Rolling_Counter "Heartbeat the inverter checks, should count 0-15 without gaps";
+CM_ BO_ 514 "Orion custom message";
+CM_ BO_ 1365 "Pedal and interlock debug";
+CM_ SG_ 1365 RTD_Timeout "90 ms ticks since the inverter ready pin was last seen, capped";
+CM_ SG_ 1365 BSE_Voltage "Brake sensor at the ADC pin, top 8 of 12 bits";
+CM_ SG_ 1365 TPS_1_Voltage "TPS1 at the ADC pin, top 8 of 12 bits";
+CM_ SG_ 1365 TPS_2_Voltage "TPS2 at the ADC pin, top 8 of 12 bits";
+CM_ SG_ 1365 LVCU_Status "Bit field: 0 disable cmd, 1 ready to drive, 2 BSE fault, 3 TPS1 out of range, 4 TPS2 out of range, 5 TPS disagree, 6 inverter enabled, 7 inverter lockout";
+CM_ BO_ 1366 "Ready to drive and why the LVCU last reset";
+CM_ SG_ 1366 Reset_Software "Error_Handler";
+CM_ BO_ 1368 "SoC estimator state";
+CM_ SG_ 1368 Innovation "Measured minus predicted cell voltage";
+CM_ SG_ 1368 Loop_dt_Max "Longest control loop since boot";
+CM_ BO_ 1370 "SoC derate. RS3 had an old layout (SoC/Cell/Active DCL as bytes 2-4), this is the firmware's";
+CM_ SG_ 1370 DCL_Source "0 = BMS DCL, 1 = SoC curve";
+CM_ SG_ 1370 DCL_Temp_Limited "1 = pack temp curve set Active_DCL";
+CM_ BO_ 1371 "Firmware git hash, see tools/find_build.sh";
+CM_ SG_ 1371 Version_Flags "Bit 0 uncommitted changes, bit 1 no git info";
+CM_ BO_ 1372 "Brake pressure";
+CM_ SG_ 1372 BPS_ADC "Raw 12 bit ADC";
+CM_ BO_ 1373 "Inverter EEPROM readback status. Bytes 1, 3 and 6 (read count, sweeps, parameter count) are left out to save AiM channels";
+CM_ SG_ 1373 InvTune_State "0 no inverter, 1 settling, 2 reading, 3 paused (inverter enabled), 4 done";
+CM_ SG_ 1373 InvTune_CRC "CRC-16/CCITT-FALSE of all 92 values, little endian, table order. inv_tune_decode.py checks against it";
+CM_ BO_ 1376 "One inverter EEPROM parameter per frame, cycling through the table in inv_tune_params.h. Log at 20 Hz or faster and decode with tools/inv_tune_decode.py";
+CM_ SG_ 1376 InvTune_Addr "Inverter CAN parameter address";
+CM_ SG_ 1376 InvTune_Value "Raw 16 bit value, scaling per parameter. 0x8000 = not read";
+CM_ BO_ 1536 "Orion custom message";
+CM_ SG_ 1536 BMS_Bit0 "Name truncated to 'BMS' in RS3, copy it from there";
+CM_ SG_ 1536 BMS_LV_Input "Gain not visible in RS3 screenshot, copy it from RS3";
+CM_ BO_ 1951 "Orion custom message";
+CM_ SG_ 1951 Min_Cell_Voltage "Gain not visible in RS3 screenshot, copy it from RS3";
+CM_ SG_ 1951 Low_Opencell_Voltage "Used by the SoC derate";
+CM_ SG_ 1951 Avg_Opencell_Voltage "Used by the SoC derate";
+
+BA_DEF_ BO_ "GenMsgCycleTime" INT 0 65535;
+BA_DEF_DEF_ "GenMsgCycleTime" 0;
+BA_ "GenMsgCycleTime" BO_ 162 100;
+BA_ "GenMsgCycleTime" BO_ 165 5;
+BA_ "GenMsgCycleTime" BO_ 166 5;
+BA_ "GenMsgCycleTime" BO_ 168 5;
+BA_ "GenMsgCycleTime" BO_ 170 5;
+BA_ "GenMsgCycleTime" BO_ 171 5;
+BA_ "GenMsgCycleTime" BO_ 172 5;
+BA_ "GenMsgCycleTime" BO_ 177 5;
+BA_ "GenMsgCycleTime" BO_ 192 5;
+BA_ "GenMsgCycleTime" BO_ 1365 90;
+BA_ "GenMsgCycleTime" BO_ 1366 90;
+BA_ "GenMsgCycleTime" BO_ 1368 90;
+BA_ "GenMsgCycleTime" BO_ 1370 90;
+BA_ "GenMsgCycleTime" BO_ 1371 500;
+BA_ "GenMsgCycleTime" BO_ 1372 50;
+BA_ "GenMsgCycleTime" BO_ 1373 40;
+BA_ "GenMsgCycleTime" BO_ 1376 40;
+
+VAL_ 170 VSM_State 0 "Start" 1 "Precharge init" 2 "Precharge active" 3 "Precharge complete" 4 "Wait" 5 "Ready" 6 "Motor running" 7 "Blink fault code" 14 "Shutdown in process" 15 "Recycle power" ;
+VAL_ 170 Inverter_State 0 "Power on" 1 "Stop" 2 "Open loop" 3 "Closed loop" 4 "Wait" 8 "Idle run" 9 "Idle stop" ;
+VAL_ 170 Active_Discharge_State 0 "Disabled" 1 "Enabled, waiting" 2 "Speed check" 3 "Discharging" 4 "Complete" ;
+VAL_ 1370 DCL_Source 0 "BMS" 1 "SoC" ;
+VAL_ 1373 InvTune_State 0 "No inverter" 1 "Settling" 2 "Reading" 3 "Paused" 4 "Done" ;

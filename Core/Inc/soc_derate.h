@@ -24,15 +24,19 @@ typedef struct {
 
 typedef struct {
     uint8_t id;
+    float weak_cell; /* How much of the weak cell gap the SoC curve sees, 0-1 */
     soc_derate_curve_t soc;
+    soc_derate_curve_t temp; /* Optional */
 } soc_derate_tune_t;
 
 typedef struct {
     float gap;      /* Avg cell SoC minus weakest cell SoC */
     float weak_soc; /* KF SoC minus gap */
+    float curve_soc; /* KF SoC minus weak_cell x gap, what the SoC curve runs on */
     uint32_t dcl;
     uint8_t src;
     uint8_t cell_live;
+    uint8_t temp_limited; /* Pack temp curve is below the SoC/BMS limit */
 } soc_derate_debug_t;
 
 void soc_derate_init(void);

@@ -34,6 +34,7 @@
 #include "soc_derate.h"
 #include "control.h"
 #include "version.h"
+#include "inv_tune.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -152,6 +153,9 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
 		if (ready_pin_state) {
 			rtd_timeout = 0;
 		}
+		inv_tune_feed_state(HAL_GetTick());
+	} else if (RxHeader.StdId == CAN_ID_RX_INVERTER_PARAM) {
+		inv_tune_feed_response(RxData);
 	} else if (RxHeader.StdId == CAN_ID_RX_MOTOR_SPEED) {
 		int16_t motor_speed_raw = (int16_t) (uint16_t) (RxData[3] << 8
 				| RxData[2]);
@@ -299,6 +303,17 @@ int main(void)
 	canfilterconfig.FilterScale = CAN_FILTERSCALE_32BIT;
 	HAL_CAN_ConfigFilter(&hcan, &canfilterconfig);
 
+	canfilterconfig.FilterActivation = CAN_FILTER_ENABLE;
+	canfilterconfig.FilterBank = 8; /* Inverter parameter response */
+	canfilterconfig.FilterFIFOAssignment = CAN_RX_FIFO0;
+	canfilterconfig.FilterIdHigh = CAN_ID_RX_INVERTER_PARAM << 5;
+	canfilterconfig.FilterIdLow = 0;
+	canfilterconfig.FilterMaskIdHigh = CAN_STID_MASK_HIGH;
+	canfilterconfig.FilterMaskIdLow = CAN_STID_MASK_LOW;
+	canfilterconfig.FilterMode = CAN_FILTERMODE_IDMASK;
+	canfilterconfig.FilterScale = CAN_FILTERSCALE_32BIT;
+	HAL_CAN_ConfigFilter(&hcan, &canfilterconfig);
+
 	HAL_CAN_Start(&hcan);
 
 	if (HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING)
@@ -316,6 +331,7 @@ int main(void)
 	soc_kf_init();
 	soc_derate_init();
 	control_init(&ctrl);
+	inv_tune_init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -342,6 +358,7 @@ int main(void)
 	uint32_t last_loop_tick = HAL_GetTick();
 	uint32_t version_tick = last_loop_tick - VERSION_TX_MS;
 	uint32_t bps_tick = last_loop_tick;
+	uint32_t inv_tune_tick = last_loop_tick;
 
 	while (1) {
 		can_tx_pump();
@@ -436,9 +453,24 @@ int main(void)
 
 		control_pack_inverter(TxData, torque_request, inverter_lockout,
 				should_disable_inverter, heartbeat_counter);
-		can_tx_send(CAN_ID_TX_INVERTER_CMD, TxData, 8);
+		can_tx_send_command(CAN_ID_TX_INVERTER_CMD, TxData, 8);
 		heartbeat_counter += 1;
 		heartbeat_counter = heartbeat_counter & CAN_HEARTBEAT_MASK;
+
+		if (inv_tune_update(loop_tick, inverter_enabled, TxData)) {
+			can_tx_send(CAN_ID_TX_INVERTER_PARAM, TxData, 8);
+		}
+
+		/* Telemetry gives way so the inverter command is never dropped */
+		if (loop_tick - inv_tune_tick >= INV_TUNE_TX_MS
+				&& can_tx_depth() < CAN_TX_QUEUE_LEN / 2) {
+			uint16_t tune_id;
+			const uint8_t tune_dlc = inv_tune_pack_next(&tune_id, TxData);
+			if (tune_dlc) {
+				can_tx_send(tune_id, TxData, tune_dlc);
+			}
+			inv_tune_tick = loop_tick;
+		}
 
 		if (loop_tick - version_tick >= VERSION_TX_MS) {
 			version_pack(TxData);
@@ -728,7 +760,11 @@ static void MX_CAN_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN CAN_Init 2 */
-
+	/* Retry a frame that loses arbitration. 0x0C0 loses to every fast
+	 * inverter frame, and without this it was dropped instead of sent late.
+	 * Still in init mode here, HAL_CAN_Start leaves it. */
+	hcan.Init.AutoRetransmission = ENABLE;
+	CLEAR_BIT(hcan.Instance->MCR, CAN_MCR_NART);
   /* USER CODE END CAN_Init 2 */
 
 }

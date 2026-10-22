@@ -112,6 +112,10 @@
 #define CAN_ID_RX_BMS_STATUS     0x600
 #define CAN_ID_RX_BMS_CELL       0x79F
 
+/* Inverter parameter read/write, offset 0x0A0 + 0x21/0x22 */
+#define CAN_ID_TX_INVERTER_PARAM 0x0C1
+#define CAN_ID_RX_INVERTER_PARAM 0x0C2
+
 #define CAN_ID_TX_INVERTER_CMD 0x0C0
 #define CAN_ID_TX_DEBUG        0x555
 #define CAN_ID_TX_RTD          0x556
