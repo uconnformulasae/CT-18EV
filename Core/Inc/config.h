@@ -53,7 +53,7 @@
 
 /* Regen (one-pedal) enable (1 = enabled, 0 = disabled) */
 #ifndef REGEN_ENABLE
-#define REGEN_ENABLE 0
+#define REGEN_ENABLE 1
 #endif
 
 /* Torque map */
