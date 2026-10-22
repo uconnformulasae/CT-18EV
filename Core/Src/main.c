@@ -453,7 +453,7 @@ int main(void)
 
 		control_pack_inverter(TxData, torque_request, inverter_lockout,
 				should_disable_inverter, heartbeat_counter);
-		can_tx_send(CAN_ID_TX_INVERTER_CMD, TxData, 8);
+		can_tx_send_command(CAN_ID_TX_INVERTER_CMD, TxData, 8);
 		heartbeat_counter += 1;
 		heartbeat_counter = heartbeat_counter & CAN_HEARTBEAT_MASK;
 
@@ -760,7 +760,11 @@ static void MX_CAN_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN CAN_Init 2 */
-
+	/* Retry a frame that loses arbitration. 0x0C0 loses to every fast
+	 * inverter frame, and without this it was dropped instead of sent late.
+	 * Still in init mode here, HAL_CAN_Start leaves it. */
+	hcan.Init.AutoRetransmission = ENABLE;
+	CLEAR_BIT(hcan.Instance->MCR, CAN_MCR_NART);
   /* USER CODE END CAN_Init 2 */
 
 }

@@ -112,7 +112,6 @@ static void test_table(void)
     printf("test_table\n");
 
     check_eq(inv_tune_count(), 92, "every documented export parameter");
-    check_eq(inv_tune_frames(), 23, "4 parameters per frame");
     check_eq(inv_tune_addrs[84], 251, "original 85 keep their slots");
 
     uint8_t unique = 1u;
@@ -131,11 +130,7 @@ static void test_table(void)
     check(unique, "no address read twice");
     check(in_range, "all in the user EEPROM range");
 
-    const uint32_t rotation_ms = (inv_tune_frames() + 1u) * INV_TUNE_TX_MS;
-    check(rotation_ms < 500u, "every frame repeats faster than the AiM timeout");
-    /* Room for the 10 export parameters still without an address */
-    check((26u + 1u) * INV_TUNE_TX_MS < 500u, "full export still fits the AiM timeout");
-    check(INV_TUNE_CAN_ID_BASE + inv_tune_frames() - 1u <= 0x57F, "tune IDs stay in 0x56x-0x57x");
+    check(2u * INV_TUNE_TX_MS < 500u, "both frames repeat faster than the AiM timeout");
 }
 
 static void test_waits_for_inverter(void)
@@ -224,6 +219,13 @@ static void test_retries_then_missing(void)
     check_eq(id, INV_TUNE_CAN_ID_STATUS, "status first");
     check_eq(d[1], inv_tune_count() - 1, "read count");
     check_eq(d[2], 1, "missing count");
+
+    inv_tune_pack_next(&id, d);
+    inv_tune_pack_next(&id, d);
+    inv_tune_pack_next(&id, d);
+    check_eq(id, INV_TUNE_CAN_ID_VALUE, "second value frame");
+    check_eq(d[0] | d[1] << 8, 241, "address of the silent parameter");
+    check_eq(d[2] | d[3] << 8, INV_TUNE_MISSING, "sent as 0x8000");
 }
 
 static void test_pauses_while_enabled(void)
@@ -260,12 +262,12 @@ static void test_rereads_after_inverter_restart(void)
     uint16_t id;
     uint8_t d[8];
     uint8_t frames = 0u;
-    for (uint8_t i = 0; i <= inv_tune_frames(); i++) {
-        if (inv_tune_pack_next(&id, d) && id != INV_TUNE_CAN_ID_STATUS) {
+    for (uint16_t i = 0; i < 2u * inv_tune_count(); i++) {
+        if (inv_tune_pack_next(&id, d) && id == INV_TUNE_CAN_ID_VALUE) {
             frames++;
         }
     }
-    check_eq(frames, inv_tune_frames(), "last tune still sent while it is away");
+    check_eq(frames, inv_tune_count(), "last tune still sent while it is away");
 
     heartbeat = 1u;
     value_offset = 1u; /* Retuned while off */
@@ -316,7 +318,7 @@ static void test_frames(void)
     uint16_t id;
     uint8_t d[8];
     uint8_t sent = 0u;
-    for (uint8_t i = 0; i < 2u * (inv_tune_frames() + 1u); i++) {
+    for (uint8_t i = 0; i < 4u; i++) {
         memset(d, 0xEE, sizeof(d));
         const uint8_t dlc = inv_tune_pack_next(&id, d);
         if (dlc) {
@@ -327,40 +329,42 @@ static void test_frames(void)
             check_eq(d[6], inv_tune_count(), "parameter count");
         }
     }
-    check_eq(sent, 2, "status once per rotation");
+    check_eq(sent, 2, "status every other slot");
 
     run_until_done(10000u);
-    uint8_t seen[32] = {0};
-    for (uint8_t i = 0; i <= inv_tune_frames(); i++) {
+    uint8_t seen[128] = {0};
+    uint8_t alternates = 1u;
+    for (uint16_t i = 0; i < 2u * inv_tune_count(); i++) {
         memset(d, 0xEE, sizeof(d));
         const uint8_t dlc = inv_tune_pack_next(&id, d);
+        if ((i % 2u == 0u) != (id == INV_TUNE_CAN_ID_STATUS)) {
+            alternates = 0u;
+        }
         if (id == INV_TUNE_CAN_ID_STATUS) {
             check_eq(d[0], INV_TUNE_DONE, "done");
             check_eq(d[4] | d[5] << 8, inv_tune_crc(), "crc little endian");
             continue;
         }
-        const uint8_t f = (uint8_t)(id - INV_TUNE_CAN_ID_BASE);
-        check(f < inv_tune_frames(), "id in range");
-        seen[f]++;
-        for (uint8_t s = 0; s < dlc / 2u; s++) {
-            const uint8_t p = (uint8_t)(f * 4u + s);
-            check_eq(d[2 * s] | d[2 * s + 1] << 8, fake_value(inv_tune_addrs[p]),
-                     "value little endian in slot");
-        }
-        if (f < inv_tune_frames() - 1u) {
-            check_eq(dlc, 8, "full frame");
-        } else {
-            check_eq(dlc, 2 * (inv_tune_count() - 4 * (inv_tune_frames() - 1)),
-                     "last frame holds what is left");
+        check_eq(id, INV_TUNE_CAN_ID_VALUE, "value id");
+        check_eq(dlc, INV_TUNE_VALUE_DLC, "value dlc");
+        const uint16_t addr = (uint16_t)(d[0] | d[1] << 8);
+        const uint16_t value = (uint16_t)(d[2] | d[3] << 8);
+        check_eq(value, fake_value(addr), "value matches its address, little endian");
+        for (uint8_t p = 0; p < inv_tune_count(); p++) {
+            if (inv_tune_addrs[p] == addr) {
+                check_eq(p, (i - 1u) / 2u, "table order");
+                seen[p]++;
+            }
         }
     }
+    check(alternates, "status and value take turns");
     uint8_t each_once = 1u;
-    for (uint8_t f = 0; f < inv_tune_frames(); f++) {
-        if (seen[f] != 1u) {
+    for (uint8_t p = 0; p < inv_tune_count(); p++) {
+        if (seen[p] != 1u) {
             each_once = 0u;
         }
     }
-    check(each_once, "every tune frame once per rotation");
+    check(each_once, "every parameter once per rotation");
 }
 
 static void test_signed_value(void)

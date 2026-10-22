@@ -5,8 +5,9 @@
 
 /*
  * CAN parameter addresses (CAN Protocol V6.3 2.3.4, CM SW manual 0A-0163-02),
- * in RMS GUI export order. Frame n slot m is entry 4n + m, so only ever
- * append; reordering moves AiM channels.
+ * in RMS GUI export order. The CRC runs over them in this order, so only
+ * ever append. tools/inv_tune_decode.py reads names and scaling from the
+ * comments here, keep them as "Name (unit) xScale, signed".
  *
  * In neither doc, so not read: Angle_Advance_Factor, Amp_Hours,
  * Valet_Mode_Speed, U2C_Enable/Setpoint, LV_Indicator Threshold/Hysteresis,

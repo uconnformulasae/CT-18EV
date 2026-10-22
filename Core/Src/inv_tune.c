@@ -4,7 +4,6 @@
 #include "inv_tune_params.h"
 
 #define N_PARAMS ((uint8_t)(sizeof(inv_tune_addrs) / sizeof(inv_tune_addrs[0])))
-#define N_FRAMES ((uint8_t)((N_PARAMS + 3u) / 4u))
 
 /* Written by the RX interrupt */
 static volatile uint32_t last_seen;
@@ -26,6 +25,7 @@ static uint8_t n_missing;
 static uint8_t sweeps;
 static uint16_t crc;
 static uint8_t rot;
+static uint8_t status_next;
 
 static uint16_t crc16(uint16_t c, const uint8_t *p, uint32_t n)
 {
@@ -54,6 +54,7 @@ void inv_tune_init(void)
     sweeps = 0u;
     crc = 0u;
     rot = 0u;
+    status_next = 1u;
 }
 
 void inv_tune_feed_state(uint32_t tick_ms)
@@ -164,10 +165,11 @@ uint8_t inv_tune_update(uint32_t tick_ms, uint8_t inverter_enabled, uint8_t *req
 
 uint8_t inv_tune_pack_next(uint16_t *id, uint8_t *d)
 {
-    const uint8_t slot = rot;
-    rot = (uint8_t)((rot + 1u) % (N_FRAMES + 1u));
+    /* Every other slot, keeps the status well inside the AiM timeout */
+    const uint8_t status = status_next;
+    status_next = !status_next;
 
-    if (slot == 0u) {
+    if (status) {
         *id = INV_TUNE_CAN_ID_STATUS;
         d[0] = state;
         d[1] = n_ok;
@@ -182,14 +184,14 @@ uint8_t inv_tune_pack_next(uint16_t *id, uint8_t *d)
         return 0u;
     }
 
-    const uint8_t f = (uint8_t)(slot - 1u);
-    uint8_t n = 0u;
-    *id = (uint16_t)(INV_TUNE_CAN_ID_BASE + f);
-    for (uint8_t p = (uint8_t)(f * 4u); p < N_PARAMS && n < 4u; p++, n++) {
-        d[2 * n] = (uint8_t)(values[p] & 0xFF);
-        d[2 * n + 1] = (uint8_t)(values[p] >> 8);
-    }
-    return (uint8_t)(2u * n);
+    const uint16_t addr = inv_tune_addrs[rot];
+    *id = INV_TUNE_CAN_ID_VALUE;
+    d[0] = (uint8_t)(addr & 0xFF);
+    d[1] = (uint8_t)(addr >> 8);
+    d[2] = (uint8_t)(values[rot] & 0xFF);
+    d[3] = (uint8_t)(values[rot] >> 8);
+    rot = (uint8_t)((rot + 1u) % N_PARAMS);
+    return INV_TUNE_VALUE_DLC;
 }
 
 uint8_t inv_tune_state(void)
@@ -200,11 +202,6 @@ uint8_t inv_tune_state(void)
 uint8_t inv_tune_count(void)
 {
     return N_PARAMS;
-}
-
-uint8_t inv_tune_frames(void)
-{
-    return N_FRAMES;
 }
 
 uint16_t inv_tune_value(uint8_t i)
