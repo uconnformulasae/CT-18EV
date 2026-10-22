@@ -23,10 +23,8 @@
 /tools/regen_test
 /tools/regen_off_test
 /tools/soc_derate_test
-/tools/soc_derate_endurance_test
 /tools/control_test
 /tools/version_test
-/tools/inv_tune_test
 /tools/soc_kf_replay
 /tools/*.dSYM/
 /tools/cov/

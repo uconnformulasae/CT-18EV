@@ -91,27 +91,14 @@ uint32_t soc_derate_dcl(const soc_kf_debug_t *kf, uint32_t bms_dcl, uint32_t tic
 {
     update_gap(tick_ms, dt_ms);
     dbg.weak_soc = kf->soc - dbg.gap;
-    dbg.curve_soc = kf->soc - tune->weak_cell * dbg.gap;
 
     /* BMS asking for 0 A always wins, otherwise the SoC map owns the limit */
     if (soc_kf_valid(kf) && bms_dcl > 0u) {
-        dbg.dcl = to_amps(interp(&tune->soc, dbg.curve_soc));
+        dbg.dcl = to_amps(interp(&tune->soc, dbg.weak_soc));
         dbg.src = SOC_DERATE_SRC_SOC;
     } else {
         dbg.dcl = bms_dcl;
         dbg.src = SOC_DERATE_SRC_BMS;
-    }
-
-    /* Temp only ever lowers it, and needs a live 0x600 even if the KF is out */
-    dbg.temp_limited = 0;
-    if (tune->temp.n > 0u && (kf->flags & SOC_KF_FLAG_BMS_LIVE)) {
-        /* Orion sends it signed, a cold pack is not 250 C */
-        const float temp_c = (float)(int8_t)kf->temp_c;
-        const uint32_t temp_dcl = to_amps(interp(&tune->temp, temp_c));
-        if (temp_dcl < dbg.dcl) {
-            dbg.dcl = temp_dcl;
-            dbg.temp_limited = 1;
-        }
     }
 
     return dbg.dcl;
@@ -133,7 +120,7 @@ void soc_derate_pack_debug(uint8_t *d)
     const uint16_t gap = sat_u16(dbg.gap * 10000.0f);
 
     d[0] = tune->id;
-    d[1] = (uint8_t)(dbg.src | (dbg.cell_live << 1) | (dbg.temp_limited << 2));
+    d[1] = (uint8_t)(dbg.src | (dbg.cell_live << 1));
     d[2] = (uint8_t)(dbg.dcl & 0xFF);
     d[3] = (uint8_t)(dbg.dcl >> 8);
     d[4] = (uint8_t)(weak & 0xFF);

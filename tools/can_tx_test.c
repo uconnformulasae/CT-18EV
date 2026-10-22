@@ -1,5 +1,6 @@
 /* Host tests for can_tx */
 
+
 #include <stdio.h>
 #include <string.h>
 
@@ -33,16 +34,7 @@ static void reset_all(uint32_t free_mailboxes)
     can_tx_host_free_mailboxes = free_mailboxes;
     can_tx_host_refuse = 0u;
     can_tx_host_sent_count = 0u;
-    can_tx_host_pending = 0u;
-    can_tx_host_aborts = 0u;
     memset(can_tx_host_sent, 0, sizeof(can_tx_host_sent));
-}
-
-/* The frame in this mailbox made it onto the bus */
-static void complete(uint32_t mailbox)
-{
-    can_tx_host_pending &= ~mailbox;
-    can_tx_host_free_mailboxes++;
 }
 
 static const uint8_t PAYLOAD[8] = {1, 2, 3, 4, 5, 6, 7, 8};
@@ -120,15 +112,10 @@ static void test_backpressure(void)
     check_eq(can_tx_depth(), 4, "frames stay queued");
     check_eq(can_tx_dropped(), 0, "no drops yet");
 
-    /* The last free mailbox is kept for the command */
+    /* One mailbox frees */
     can_tx_host_free_mailboxes = 1u;
     can_tx_pump();
-    check_eq(can_tx_host_sent_count, 0, "queue leaves the last mailbox alone");
-
-    /* One mailbox frees beyond it */
-    can_tx_host_free_mailboxes = 2u;
-    can_tx_pump();
-    check_eq(can_tx_host_sent_count, 1, "one frame leaves per spare mailbox");
+    check_eq(can_tx_host_sent_count, 1, "one frame leaves per free mailbox");
     check_eq(can_tx_depth(), 3, "the rest stay queued");
 
     /* Clear backlog */
@@ -177,7 +164,7 @@ static void test_index_wraparound(void)
     for (int i = 0; i < rounds; i++) {
         const uint8_t d[8] = {(uint8_t)i, (uint8_t)(i >> 8)};
         check_eq(can_tx_send((uint16_t)(0x200 + (i % 16)), d, 8), 1, "queued during wraparound");
-        can_tx_host_free_mailboxes = 2u;
+        can_tx_host_free_mailboxes = 1u;
         can_tx_host_sent_count = 0u;
         can_tx_pump();
         if (can_tx_host_sent_count == 1u) {
@@ -207,7 +194,7 @@ static void test_pump_stops_on_refusal(void)
     can_tx_pump();
     check_eq(can_tx_depth(), 2, "nothing lost when the mailbox refuses");
 
-    can_tx_host_free_mailboxes = 3u;
+    can_tx_host_free_mailboxes = 2u;
     can_tx_pump();
     check_eq(can_tx_depth(), 0, "drains once mailboxes really are free");
     check_eq(can_tx_host_sent[0].std_id, 0x0C0, "order preserved across the refusal");
@@ -235,7 +222,7 @@ static void test_fake_log_is_bounded(void)
     reset_all(1u);
     for (int i = 0; i < 70; i++) {
         can_tx_send(0x0C0, PAYLOAD, 8);
-        can_tx_host_free_mailboxes = 2u;
+        can_tx_host_free_mailboxes = 1u;
         can_tx_pump();
     }
     check_eq(can_tx_host_sent_count, 64, "log stops at its capacity");
@@ -253,133 +240,9 @@ static void test_init_clears_state(void)
     check(can_tx_depth() > 0, "queue populated");
     check(can_tx_dropped() > 0, "drops recorded");
 
-    can_tx_host_free_mailboxes = 0u;
-    can_tx_send_command(0x0C0, PAYLOAD, 8);
-    can_tx_send_command(0x0C0, PAYLOAD, 8);
-    check(can_tx_cmd_replaced() > 0, "replacement recorded");
-
     can_tx_init();
     check_eq(can_tx_depth(), 0, "init empties the queue");
     check_eq(can_tx_dropped(), 0, "init clears the drop counter");
-    check_eq(can_tx_cmd_replaced(), 0, "init clears the replaced counter");
-    can_tx_host_free_mailboxes = 3u;
-    can_tx_pump();
-    check_eq(can_tx_host_sent_count, 0, "init forgets an unsent command");
-}
-
-static const uint8_t CMD_A[8] = {0xA0, 0, 0, 0, 1, 0x13};
-static const uint8_t CMD_B[8] = {0xB0, 0, 0, 0, 1, 0x23};
-
-static void test_queue_keeps_a_mailbox_for_the_command(void)
-{
-    printf("test_queue_keeps_a_mailbox_for_the_command\n");
-
-    reset_all(3u);
-    for (int i = 0; i < 5; i++) {
-        can_tx_send((uint16_t)(0x555 + i), PAYLOAD, 8);
-    }
-    can_tx_pump();
-    check_eq(can_tx_host_sent_count, 2, "telemetry fills all but one mailbox");
-    check_eq(can_tx_host_free_mailboxes, 1, "one left over");
-
-    can_tx_send_command(0x0C0, CMD_A, 8);
-    check_eq(can_tx_host_sent_count, 3, "command goes straight out");
-    check_eq(can_tx_host_sent[2].std_id, 0x0C0, "it was the command");
-    check_eq(can_tx_depth(), 3, "telemetry still waits its turn");
-}
-
-static void test_command_skips_the_queue(void)
-{
-    printf("test_command_skips_the_queue\n");
-
-    /* Bus busy, telemetry backed up */
-    reset_all(0u);
-    for (int i = 0; i < CAN_TX_QUEUE_LEN; i++) {
-        can_tx_send(0x555, PAYLOAD, 8);
-    }
-    can_tx_host_free_mailboxes = 1u;
-    can_tx_send_command(0x0C0, CMD_A, 8);
-    check_eq(can_tx_host_sent_count, 1, "only the command goes out");
-    check_eq(can_tx_host_sent[0].std_id, 0x0C0, "ahead of a full queue");
-    check_eq(memcmp(can_tx_host_sent[0].data, CMD_A, 8), 0, "payload intact");
-    check_eq(can_tx_depth(), CAN_TX_QUEUE_LEN, "queue untouched");
-
-    /* A full queue never stops a command */
-    check_eq(can_tx_send(0x555, PAYLOAD, 8), 0, "telemetry is dropped when full");
-    complete(can_tx_host_pending);
-    can_tx_send_command(0x0C0, CMD_B, 8);
-    check_eq(can_tx_host_sent_count, 2, "next command still goes out");
-    check_eq(memcmp(can_tx_host_sent[1].data, CMD_B, 8), 0, "the newer one");
-    check_eq(can_tx_host_aborts, 0, "nothing aborted, the first one went out");
-}
-
-static void test_newer_command_replaces_unsent(void)
-{
-    printf("test_newer_command_replaces_unsent\n");
-
-    reset_all(0u);
-    can_tx_send_command(0x0C0, CMD_A, 8);
-    can_tx_send_command(0x0C0, CMD_B, 8);
-    check_eq(can_tx_host_sent_count, 0, "no mailbox, nothing out");
-    check_eq(can_tx_cmd_replaced(), 1, "older command counted as replaced");
-
-    can_tx_host_free_mailboxes = 1u;
-    can_tx_pump();
-    can_tx_host_free_mailboxes = 3u;
-    can_tx_pump();
-    check_eq(can_tx_host_sent_count, 1, "only one command goes out");
-    check_eq(memcmp(can_tx_host_sent[0].data, CMD_B, 8), 0, "and it is the newest");
-}
-
-static void test_stale_command_aborted(void)
-{
-    printf("test_stale_command_aborted\n");
-
-    reset_all(3u);
-    can_tx_send_command(0x0C0, CMD_A, 8);
-    check_eq(can_tx_host_sent_count, 1, "first command in a mailbox");
-
-    /* Still pending a loop later, e.g. nothing acked it */
-    can_tx_send_command(0x0C0, CMD_B, 8);
-    check_eq(can_tx_host_aborts, 1, "stale command pulled from its mailbox");
-    check_eq(can_tx_cmd_replaced(), 1, "and counted");
-    check_eq(can_tx_host_sent_count, 2, "new command sent");
-    check_eq(memcmp(can_tx_host_sent[1].data, CMD_B, 8), 0, "with the new payload");
-    check_eq(can_tx_host_free_mailboxes, 2, "the aborted mailbox came back");
-
-    /* The new one is tracked, so the next stale one is pulled too */
-    can_tx_send_command(0x0C0, CMD_A, 8);
-    check_eq(can_tx_host_aborts, 2, "each stale command is pulled");
-    check_eq(can_tx_host_free_mailboxes, 2, "never more than one command in flight");
-}
-
-static void test_sent_command_left_alone(void)
-{
-    printf("test_sent_command_left_alone\n");
-
-    reset_all(3u);
-    for (int i = 0; i < 50; i++) {
-        can_tx_send_command(0x0C0, CMD_A, 8);
-        complete(can_tx_host_pending);
-    }
-    check_eq(can_tx_host_aborts, 0, "a command that went out is never aborted");
-    check_eq(can_tx_cmd_replaced(), 0, "nothing replaced on a healthy bus");
-    check_eq(can_tx_host_sent_count, 50, "every command sent");
-}
-
-static void test_command_refused_then_sent(void)
-{
-    printf("test_command_refused_then_sent\n");
-
-    reset_all(3u);
-    can_tx_host_refuse = 1u;
-    can_tx_send_command(0x0C0, CMD_A, 8);
-    check_eq(can_tx_host_sent_count, 0, "held while the HAL refuses");
-
-    can_tx_host_refuse = 0u;
-    can_tx_pump();
-    check_eq(can_tx_host_sent_count, 1, "sent on the next pump");
-    check_eq(can_tx_cmd_replaced(), 0, "nothing replaced");
 }
 
 int main(void)
@@ -393,12 +256,6 @@ int main(void)
     test_pump_stops_on_refusal();
     test_fake_log_is_bounded();
     test_init_clears_state();
-    test_queue_keeps_a_mailbox_for_the_command();
-    test_command_skips_the_queue();
-    test_newer_command_replaces_unsent();
-    test_stale_command_aborted();
-    test_sent_command_left_alone();
-    test_command_refused_then_sent();
 
     printf("\n%d checks, %d failures\n", checks, failures);
     return failures != 0;

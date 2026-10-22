@@ -8,9 +8,6 @@
 #include "../Core/Src/soc_derate.c"
 #include "../Core/Src/soc_kf.c"
 
-#define STR_(x) #x
-#define STR(x)  STR_(x)
-
 #define KF_OK   (SOC_KF_FLAG_INIT | SOC_KF_FLAG_BMS_LIVE)
 #define STEP_MS 5u
 #define BMS_DCL 200u
@@ -55,39 +52,24 @@ static const soc_kf_debug_t *kf_at(float soc, uint8_t flags)
 }
 
 /* Independent of interp() so the test doesn't check the code against itself */
-static uint32_t expected_amps(const soc_derate_curve_t *c, float x)
+static uint32_t expected_dcl(float soc)
 {
-    const soc_derate_pt_t *p = c->pts;
-    const int n = c->n;
+    const soc_derate_pt_t *p = tune->soc.pts;
+    const int n = tune->soc.n;
     float a = p[n - 1].amps;
 
-    if (x <= p[0].x) {
+    if (soc <= p[0].x) {
         a = p[0].amps;
     } else {
         for (int i = 0; i < n - 1; i++) {
-            if (x <= p[i + 1].x) {
-                const float f = (x - p[i].x) / (p[i + 1].x - p[i].x);
+            if (soc <= p[i + 1].x) {
+                const float f = (soc - p[i].x) / (p[i + 1].x - p[i].x);
                 a = p[i].amps + f * (p[i + 1].amps - p[i].amps);
                 break;
             }
         }
     }
     return (a > 0.0f) ? (uint32_t)lroundf(a) : 0u;
-}
-
-static uint32_t expected_dcl(float soc)
-{
-    return expected_amps(&tune->soc, soc);
-}
-
-/* What the temp curve leaves of a limit at the kf's pack temp */
-static uint32_t temp_capped(uint32_t amps)
-{
-    if (tune->temp.n == 0) {
-        return amps;
-    }
-    const uint32_t t = expected_amps(&tune->temp, (float)(int8_t)kf.temp_c);
-    return (t < amps) ? t : amps;
 }
 
 /* 0.1 mV raw, as Orion sends it */
@@ -107,8 +89,6 @@ static void check_tune(const char *name, soc_derate_tune_t t)
 
     snprintf(what, sizeof(what), "%s: has points", name);
     check(t.soc.n >= 1, what);
-    snprintf(what, sizeof(what), "%s: weak_cell within 0-1", name);
-    check(t.weak_cell >= 0.0f && t.weak_cell <= 1.0f, what);
 
     for (int i = 0; i < t.soc.n; i++) {
         snprintf(what, sizeof(what), "%s: point %d SoC within 0-1", name, i);
@@ -118,17 +98,6 @@ static void check_tune(const char *name, soc_derate_tune_t t)
         if (i > 0) {
             snprintf(what, sizeof(what), "%s: points sorted by SoC (%d)", name, i);
             check(t.soc.pts[i].x > t.soc.pts[i - 1].x, what);
-        }
-    }
-
-    for (int i = 0; i < t.temp.n; i++) {
-        snprintf(what, sizeof(what), "%s: temp point %d within -40-120 C", name, i);
-        check(t.temp.pts[i].x >= -40.0f && t.temp.pts[i].x <= 120.0f, what);
-        snprintf(what, sizeof(what), "%s: temp point %d amps not negative", name, i);
-        check(t.temp.pts[i].amps >= 0.0f, what);
-        if (i > 0) {
-            snprintf(what, sizeof(what), "%s: temp points sorted (%d)", name, i);
-            check(t.temp.pts[i].x > t.temp.pts[i - 1].x, what);
         }
     }
 
@@ -213,22 +182,8 @@ static void test_gap(void)
     const uint32_t dcl = soc_derate_dcl(kf_at(soc, KF_OK), BMS_DCL, 0u, STEP_MS);
     check(want_gap > 0.02f, "test cell is noticeably low");
     check_near(soc_derate_get_debug()->gap, want_gap, 1e-4f, "first reading applies at once");
-    const float curve_soc = soc - tune->weak_cell * want_gap;
     check_near(soc_derate_get_debug()->weak_soc, soc - want_gap, 1e-4f, "weak cell soc");
-    check_near(soc_derate_get_debug()->curve_soc, curve_soc, 1e-4f, "curve soc");
-    check_eq(dcl, expected_dcl(curve_soc), "map runs on weighted gap");
-
-    /* At the top of the curve's slope any gap the tune counts pulls the limit down */
-    if (tune->soc.n > 1) {
-        const soc_derate_pt_t *top = &tune->soc.pts[tune->soc.n - 1];
-        soc_derate_init();
-        soc_derate_feed_cells(raw(low_v), raw(avg_v), 0u);
-        const uint32_t top_dcl = soc_derate_dcl(kf_at(top->x, KF_OK), BMS_DCL, 0u, STEP_MS);
-        check_eq(top_dcl, expected_dcl(top->x - tune->weak_cell * want_gap),
-                 "weighted gap at top of curve");
-        check_eq(top_dcl < lroundf(top->amps), tune->weak_cell > 0.0f,
-                 "gap lowers the limit only when weighted");
-    }
+    check_eq(dcl, expected_dcl(soc - want_gap), "map runs on weak cell soc");
 
     /* Pack rebalances: gap decays with the filter time constant */
     uint32_t t = 0;
@@ -294,75 +249,6 @@ static void test_stale(void)
     check_eq(soc_derate_get_debug()->cell_live, 1, "live across tick wrap");
 }
 
-/* ---- pack temp curve ---- */
-
-static void test_temp(void)
-{
-    printf("test_temp\n");
-    soc_derate_init();
-
-    if (tune->temp.n == 0) {
-        for (int t = 0; t <= 120; t += 10) {
-            kf.temp_c = (uint8_t)t;
-            soc_derate_dcl(kf_at(1.0f, KF_OK), BMS_DCL, 0u, STEP_MS);
-            check_eq(soc_derate_get_debug()->temp_limited, 0, "no temp curve, never limits");
-        }
-        check_eq(soc_derate_get_debug()->dcl, expected_dcl(1.0f), "no temp curve, SoC map only");
-        kf.temp_c = 0;
-        return;
-    }
-
-    /* Lower of the two at every SoC and temp */
-    int bad = 0;
-    for (int t = 0; t <= 100; t++) {
-        for (int i = 0; i <= 100; i += 5) {
-            const float soc = (float)i * 0.01f;
-            kf.temp_c = (uint8_t)t;
-            const uint32_t s_dcl = expected_dcl(soc);
-            const uint32_t t_dcl = expected_amps(&tune->temp, (float)t);
-            const uint32_t want = (t_dcl < s_dcl) ? t_dcl : s_dcl;
-            const uint32_t got = soc_derate_dcl(kf_at(soc, KF_OK), BMS_DCL, 0u, STEP_MS);
-            const uint8_t flag = soc_derate_get_debug()->temp_limited;
-            if (got != want || flag != (t_dcl < s_dcl)) {
-                if (bad++ < 3) {
-                    printf("  %d C soc %.2f: got %u (flag %u) want %u\n", t, soc, got, flag, want);
-                }
-            }
-        }
-    }
-    check_eq(bad, 0, "min of SoC and temp curves");
-
-    const soc_derate_pt_t *p = tune->temp.pts;
-    const int n = tune->temp.n;
-    kf.temp_c = (uint8_t)lroundf(p[n - 1].x + 10.0f);
-    check_eq(soc_derate_dcl(kf_at(1.0f, KF_OK), BMS_DCL, 0u, STEP_MS),
-             temp_capped(expected_dcl(1.0f)), "held past the hottest point");
-    check_eq(soc_derate_get_debug()->src, SOC_DERATE_SRC_SOC, "source still SoC");
-
-    /* Still applies to the BMS limit when the KF can't be trusted */
-    check_eq(soc_derate_dcl(kf_at(1.0f, KF_OK | SOC_KF_FLAG_VBAD), BMS_DCL, 0u, STEP_MS),
-             temp_capped(BMS_DCL), "caps BMS fallback");
-    check_eq(soc_derate_get_debug()->src, SOC_DERATE_SRC_BMS, "source BMS");
-    check_eq(soc_derate_dcl(kf_at(1.0f, KF_OK), 0u, 0u, STEP_MS), 0, "BMS 0 A still wins");
-    check_eq(soc_derate_get_debug()->temp_limited, 0, "0 A is not the temp's doing");
-
-    /* Temp is stale with the BMS, nothing to go on */
-    check_eq(soc_derate_dcl(kf_at(1.0f, SOC_KF_FLAG_INIT), BMS_DCL, 0u, STEP_MS), BMS_DCL,
-             "ignored without live BMS");
-    check_eq(soc_derate_get_debug()->temp_limited, 0, "no flag without live BMS");
-
-    /* Below 0 C comes in as a big unsigned byte */
-    kf.temp_c = (uint8_t)(int8_t)-5;
-    soc_derate_dcl(kf_at(1.0f, KF_OK), BMS_DCL, 0u, STEP_MS);
-    check_eq(soc_derate_get_debug()->dcl, expected_dcl(1.0f), "-5 C is not hot");
-
-    /* Cools back down */
-    kf.temp_c = (uint8_t)lroundf(p[0].x - 10.0f);
-    check_eq(soc_derate_dcl(kf_at(1.0f, KF_OK), BMS_DCL, 0u, STEP_MS),
-             temp_capped(expected_dcl(1.0f)), "recovers when cool");
-    kf.temp_c = 0;
-}
-
 static void test_fallback(void)
 {
     printf("test_fallback\n");
@@ -373,7 +259,7 @@ static void test_fallback(void)
     check_eq(soc_derate_dcl(kf_at(0.5f, SOC_KF_FLAG_INIT), BMS_DCL, 0u, STEP_MS), BMS_DCL,
              "bms not live");
     check_eq(soc_derate_dcl(kf_at(0.5f, KF_OK | SOC_KF_FLAG_VBAD), BMS_DCL, 0u, STEP_MS),
-             temp_capped(BMS_DCL), "bad voltage");
+             BMS_DCL, "bad voltage");
     check_eq(soc_derate_dcl(kf_at(0.5f, KF_OK | SOC_KF_FLAG_VBAD), 0u, 0u, STEP_MS), 0,
              "bms dcl of 0 passes through");
     check_eq(soc_derate_dcl(kf_at(0.5f, KF_OK), BMS_DCL, 0u, STEP_MS), expected_dcl(0.5f),
@@ -403,20 +289,10 @@ static void test_pack(void)
     check_eq(b[0], tune->id, "tune id");
     check_eq(b[1] & 0x01, SOC_DERATE_SRC_SOC, "source bit");
     check_eq((b[1] >> 1) & 0x01, 1, "cell live bit");
-    check_eq((b[1] >> 2) & 0x01, 0, "temp bit clear when cool");
-    check_eq(b[1] & 0xF8, 0, "unused bits clear");
+    check_eq(b[1] & 0xFC, 0, "unused bits clear");
     check_eq(b[2] | b[3] << 8, (long)dcl, "dcl");
     check_eq(b[4] | b[5] << 8, lroundf(d->weak_soc * 10000.0f), "weak soc 0.01%");
     check_eq(b[6] | b[7] << 8, lroundf(d->gap * 10000.0f), "gap 0.01%");
-
-    if (tune->temp.n > 0) {
-        kf.temp_c = 120;
-        soc_derate_dcl(kf_at(soc, KF_OK), BMS_DCL, 0u, STEP_MS);
-        soc_derate_pack_debug(b);
-        check_eq((b[1] >> 2) & 0x01, 1, "temp bit");
-        check_eq(b[2] | b[3] << 8, expected_amps(&tune->temp, 120.0f), "temp dcl");
-        kf.temp_c = 0;
-    }
 
     soc_derate_dcl(kf_at(0.5f, 0), 300u, 0u, STEP_MS);
     soc_derate_pack_debug(b);
@@ -438,12 +314,10 @@ static void test_pack(void)
 
 int main(void)
 {
-    printf("tune %s\n", STR(SOC_DERATE_TUNE));
     test_tunes();
     test_map();
     test_gap();
     test_stale();
-    test_temp();
     test_fallback();
     test_pack();
 
