@@ -18,11 +18,11 @@
 #define TPS2_100PER 1.79f
 
 /* APPS out-of-range thresholds (V) */
-#define TPS1_FAULT_LOW  0.2f
-#define TPS1_FAULT_HIGH 2.40f
+#define TPS1_FAULT_LOW  0.18f
+#define TPS1_FAULT_HIGH 2.50f
 
-#define TPS2_FAULT_LOW  0.800f
-#define TPS2_FAULT_HIGH 2.8f
+#define TPS2_FAULT_LOW  0.700f
+#define TPS2_FAULT_HIGH 2.9f
 
 /* Max APPS disagreement (FSAE T.4.2.4) */
 #define APPS_TRIP_PERCENT 0.50f
