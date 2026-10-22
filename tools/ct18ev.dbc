@@ -145,6 +145,12 @@ BO_ 1373 LVCU_InvTuneStatus: 7 LVCU
  SG_ InvTune_Missing : 16|8@1+ (1,0) [0|255] "" AIM
  SG_ InvTune_CRC : 32|16@1+ (1,0) [0|65535] "" AIM
 
+BO_ 1374 LVCU_Pedals: 8 LVCU
+ SG_ TPS_1_V_Fine : 0|16@1+ (0.000805860806,0) [0|3.3] "V" AIM
+ SG_ TPS_2_V_Fine : 16|16@1+ (0.000805860806,0) [0|3.3] "V" AIM
+ SG_ TPS_1_Fine : 32|16@1+ (0.01,0) [0|100] "%" AIM
+ SG_ TPS_2_Fine : 48|16@1+ (0.01,0) [0|100] "%" AIM
+
 BO_ 1376 LVCU_InvTuneValue: 4 LVCU
  SG_ InvTune_Addr : 0|16@1+ (1,0) [0|65535] "" AIM
  SG_ InvTune_Value : 16|16@1+ (1,0) [0|65535] "" AIM
@@ -205,6 +211,10 @@ CM_ SG_ 1372 BPS_ADC "Raw 12 bit ADC";
 CM_ BO_ 1373 "Inverter EEPROM readback status. Bytes 1, 3 and 6 (read count, sweeps, parameter count) are left out to save AiM channels";
 CM_ SG_ 1373 InvTune_State "0 no inverter, 1 settling, 2 reading, 3 paused (inverter enabled), 4 done";
 CM_ SG_ 1373 InvTune_CRC "CRC-16/CCITT-FALSE of all 92 values, little endian, table order. inv_tune_decode.py checks against it";
+CM_ BO_ 1374 "Pedals at full resolution, what the BSE and APPS checks see";
+CM_ SG_ 1374 TPS_1_V_Fine "TPS1 at the ADC pin, raw 12 bit";
+CM_ SG_ 1374 TPS_2_V_Fine "TPS2 at the ADC pin, raw 12 bit";
+CM_ SG_ 1374 TPS_1_Fine "Calibrated TPS1, throttle used for BSE is the average of both";
 CM_ BO_ 1376 "One inverter EEPROM parameter per frame, cycling through the table in inv_tune_params.h. Log at 20 Hz or faster and decode with tools/inv_tune_decode.py";
 CM_ SG_ 1376 InvTune_Addr "Inverter CAN parameter address";
 CM_ SG_ 1376 InvTune_Value "Raw 16 bit value, scaling per parameter. 0x8000 = not read";
@@ -234,6 +244,7 @@ BA_ "GenMsgCycleTime" BO_ 1370 90;
 BA_ "GenMsgCycleTime" BO_ 1371 500;
 BA_ "GenMsgCycleTime" BO_ 1372 50;
 BA_ "GenMsgCycleTime" BO_ 1373 40;
+BA_ "GenMsgCycleTime" BO_ 1374 20;
 BA_ "GenMsgCycleTime" BO_ 1376 40;
 
 VAL_ 170 VSM_State 0 "Start" 1 "Precharge init" 2 "Precharge active" 3 "Precharge complete" 4 "Wait" 5 "Ready" 6 "Motor running" 7 "Blink fault code" 14 "Shutdown in process" 15 "Recycle power" ;

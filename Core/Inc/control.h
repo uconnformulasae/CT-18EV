@@ -65,4 +65,8 @@ void control_pack_debug(uint8_t *d, const control_status_t *s);
 /* 0x55C: psi x10 [0:1], raw ADC [2:3], little endian; bit 0 pressed, bit 1 oor [4] */
 void control_pack_bps(uint8_t *d, float psi, uint16_t adc, uint8_t pressed, uint8_t oor);
 
+/* 0x55E: TPS1/TPS2 raw ADC [0:1] [2:3], TPS1/TPS2 0.01% [4:5] [6:7], little endian */
+void control_pack_pedals(uint8_t *d, const control_pedals_t *p, uint16_t tps1_adc,
+                         uint16_t tps2_adc);
+
 #endif /* CONTROL_H */

@@ -358,6 +358,7 @@ int main(void)
 	uint32_t last_loop_tick = HAL_GetTick();
 	uint32_t version_tick = last_loop_tick - VERSION_TX_MS;
 	uint32_t bps_tick = last_loop_tick;
+	uint32_t pedals_tick = last_loop_tick;
 	uint32_t inv_tune_tick = last_loop_tick;
 
 	while (1) {
@@ -483,6 +484,13 @@ int main(void)
 					brake_pressed, bps_oor);
 			can_tx_send(CAN_ID_TX_BPS, TxData, CAN_BPS_DLC);
 			bps_tick = loop_tick;
+		}
+
+		if (loop_tick - pedals_tick >= PEDALS_TX_MS) {
+			control_pack_pedals(TxData, &pedals, (uint16_t) tps1_adc,
+					(uint16_t) tps2_adc);
+			can_tx_send(CAN_ID_TX_PEDALS, TxData, CAN_PEDALS_DLC);
+			pedals_tick = loop_tick;
 		}
 
 		if (print_ready) {

@@ -459,6 +459,40 @@ static void test_pack_bps(void)
     check_eq(d[4], 0x02, "oor bit");
 }
 
+static void test_pack_pedals(void)
+{
+    printf("test_pack_pedals\n");
+    control_pedals_t p = {0};
+    uint8_t d[CAN_PEDALS_DLC];
+
+    p.tps1 = 0.2468f;
+    p.tps2 = 0.25f;
+    control_pack_pedals(d, &p, 0x0ABC, 0x0FFF);
+    check_eq(d[0] | d[1] << 8, 0x0ABC, "tps1 full 12 bit adc");
+    check_eq(d[2] | d[3] << 8, 0x0FFF, "tps2 full 12 bit adc");
+    check_eq(d[4] | d[5] << 8, 2468, "tps1 0.01%");
+    check_eq(d[6] | d[7] << 8, 2500, "tps2 0.01%");
+
+    /* Finer than 0x555's whole percent, either side of the BSE trip */
+    p.tps1 = BSE_TRIP_TPS - 0.0004f;
+    p.tps2 = BSE_TRIP_TPS + 0.0004f;
+    control_pack_pedals(d, &p, 0, 0);
+    check_eq(d[4] | d[5] << 8, 2496, "just under trip");
+    check_eq(d[6] | d[7] << 8, 2504, "just over trip");
+
+    p.tps1 = 1.0f;
+    p.tps2 = 0.0f;
+    control_pack_pedals(d, &p, 0, 0);
+    check_eq(d[4] | d[5] << 8, 10000, "full pedal");
+    check_eq(d[6] | d[7] << 8, 0, "no pedal");
+
+    p.tps1 = 1.5f;
+    p.tps2 = -0.5f;
+    control_pack_pedals(d, &p, 0, 0);
+    check_eq(d[4] | d[5] << 8, 10000, "clamped high");
+    check_eq(d[6] | d[7] << 8, 0, "clamped low");
+}
+
 int main(void)
 {
     test_matches_old();
@@ -472,6 +506,7 @@ int main(void)
     test_pack_inverter();
     test_pack_debug();
     test_pack_bps();
+    test_pack_pedals();
 
     printf("\n%d checks, %d failures\n", checks, failures);
     return failures != 0;

@@ -120,6 +120,27 @@ void control_pack_debug(uint8_t *d, const control_status_t *s)
     d[7] = (int)(p->tps * 100) & 0xFF;
 }
 
+static uint16_t to_hundredths(float x)
+{
+    return (uint16_t)(fmaxf(0.0f, fminf(x, 1.0f)) * 10000.0f + 0.5f);
+}
+
+void control_pack_pedals(uint8_t *d, const control_pedals_t *p, uint16_t tps1_adc,
+                         uint16_t tps2_adc)
+{
+    const uint16_t tps1 = to_hundredths(p->tps1);
+    const uint16_t tps2 = to_hundredths(p->tps2);
+
+    d[0] = tps1_adc & 0xFF;
+    d[1] = tps1_adc >> 8 & 0xFF;
+    d[2] = tps2_adc & 0xFF;
+    d[3] = tps2_adc >> 8 & 0xFF;
+    d[4] = tps1 & 0xFF;
+    d[5] = tps1 >> 8 & 0xFF;
+    d[6] = tps2 & 0xFF;
+    d[7] = tps2 >> 8 & 0xFF;
+}
+
 void control_pack_bps(uint8_t *d, float psi, uint16_t adc, uint8_t pressed, uint8_t oor)
 {
     const uint16_t p = (uint16_t)(psi / BPS_CAN_PSI_PER_BIT + 0.5f);
