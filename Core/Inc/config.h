@@ -14,8 +14,8 @@
 #define TPS1_0PER   1.39f
 #define TPS1_100PER 2.40f
 
-#define TPS2_0PER   0.03f
-#define TPS2_100PER 1.64f
+#define TPS2_0PER   0.800f
+#define TPS2_100PER 1.79f
 
 /* APPS out-of-range thresholds (V) */
 #define TPS1_FAULT_LOW  0.2f
@@ -47,9 +47,6 @@
 
 /* Brake pressure frame period (ms), 20 Hz */
 #define BPS_TX_MS 50u
-
-/* Pedal frame period (ms), 50 Hz */
-#define PEDALS_TX_MS 20u
 
 #define BSE_TRIP_TPS  0.25f
 #define BSE_CLEAR_TPS 0.05f
@@ -123,10 +120,8 @@
 #define CAN_ID_TX_DEBUG        0x555
 #define CAN_ID_TX_RTD          0x556
 #define CAN_ID_TX_BPS          0x55C
-#define CAN_ID_TX_PEDALS       0x55E
 
-#define CAN_BPS_DLC    5
-#define CAN_PEDALS_DLC 8
+#define CAN_BPS_DLC 5
 
 #define CAN_STID_MASK_HIGH 0xFFE0
 #define CAN_STID_MASK_LOW  0x0004
