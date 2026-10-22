@@ -14,7 +14,7 @@
 #define TPS1_0PER   1.39f
 #define TPS1_100PER 2.40f
 
-#define TPS2_0PER   0.62f
+#define TPS2_0PER   0.03f
 #define TPS2_100PER 1.64f
 
 /* APPS out-of-range thresholds (V) */
