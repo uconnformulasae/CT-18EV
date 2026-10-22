@@ -322,6 +322,7 @@ int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_com
         ol_abort = 1;
     }
     if (ol_abort) {
+    	// ramp to zero torque
         const float prev_nm = fmaxf((float)dbg.lc_torque * 0.1f, 0.0f);
         ol_torque = fmaxf(prev_nm - LC_OPENLOOP_ABORT_RAMP_NMPS * dt, 0.0f);
     }

@@ -53,10 +53,10 @@
 #ifndef LC_OPENLOOP_STANDS
 
 // Rough guesses based on CT17 Endurance sim config
-#define LC_LASH_TAKEUP_TIME_MS 30
-#define LC_OPENLOOP_TAKEUP_TORQUE_NM 10.0f
-#define LC_OPENLOOP_KNEE_TORQUE_NM 40.0f // step up to ~90 for testing
-#define LC_OPENLOOP_HOLD_TORQUE_NM 70.0f // step up to 165 for testing (for mu=1.45, a=0.9g; NOTE: check tune, might be power limited)
+#define LC_LASH_TAKEUP_TIME_MS 30 			// somewhat long, safe to decrease as long as lash impact doesn't show up on logs
+#define LC_OPENLOOP_TAKEUP_TORQUE_NM 10.0f 	// estimate, drag torque + 5Nm
+#define LC_OPENLOOP_KNEE_TORQUE_NM 40.0f 	// step up to ~90 for testing
+#define LC_OPENLOOP_HOLD_TORQUE_NM 70.0f 	// step up to ~165 for testing (for mu=1.45, a=0.9g; NOTE: check tune, might be power limited)
 
 #define LC_OPENLOOP_TESTING_MAX_RPM 5000
 
@@ -71,8 +71,8 @@
 
 #endif
 
-#define LC_DRIVELINE_RAMP_RATE_NMPS 600
-#define LC_TRACTION_RAMP_RATE_NMPS 300
+#define LC_DRIVELINE_RAMP_RATE_NMPS 600 	// increase rate to as fast as driveline will allow without ringing (check Iq, rpm in 200hz logs)
+#define LC_TRACTION_RAMP_RATE_NMPS 300 		// okay to increase, stay comfortably below traction limit (don't spin out wheels even on cold tires/dirty surface)
 
 
 
