@@ -74,36 +74,50 @@
 #define LC_DRIVELINE_RAMP_RATE_NMPS 600 	// increase rate to as fast as driveline will allow without ringing (check Iq, rpm in 200hz logs)
 #define LC_TRACTION_RAMP_RATE_NMPS 300 		// okay to increase, stay comfortably below traction limit (don't spin out wheels even on cold tires/dirty surface)
 
-
-
-
 typedef enum {
+	LC_STATE_IDLE,
     LC_STATE_ARMED,
     LC_STATE_LAUNCHING_OPENLOOP,
     LC_STATE_LAUNCHING_CLOSEDLOOP,
-	LC_STATE_DONE
+	LC_STATE_DONE,
+	LC_STATE_FAULT
 } lc_state_t;
+
+typedef enum {
+	LC_EXIT_DRIVER_PRESSED_BRAKE,
+	LC_EXIT_DRIVER_RELEASED_THROTTLE,
+	LC_EXIT_INVERTER_LOST,
+	LC_EXIT_WSS_LOST,
+	LC_EXIT_HIT_POWER_LIMIT,
+	LC_EXIT_HIT_TIME_LIMIT
+} lc_exit_reason_t;
+
+typedef struct lc_pid {
+	float slip_ratio_raw;		// raw slip ratio
+	float slip_ratio_filtered;	// low pass filtered slip ratio
+
+	float p;					// pid proportional term
+	float i;					// pid integral term
+	float d;					// pid derivative term
+
+	float pid_torque;			// closed loop output
+} lc_pid_t;
+
+typedef struct lc_ff {
+	uint32_t tick_start;		// tick at which active launch control began (ms)
+	uint32_t tick_current;		// current tick (ms)
+
+	float ff_torque;			// open loop output torque
+} lc_ff_t;
 
 typedef struct {
     lc_state_t state;
-    uint32_t tick_start;	/* Tick at which active launch control began (ms) */
-    float slip_ratio;       /* Filtered slip ratio */
-    float slip_ratio_raw;   /* Unfiltered slip ratio */
-    float slip_rate;        /* d(slip)/dt */
-    float dt_s;             /* Loop period (s) */
-    float pid_p_term;       /* Proportional term */
-    float pid_i_term;       /* Integral term */
-    float pid_d_term;       /* Derivative term */
-    float pid_output;       /* Total PID output */
-    int32_t lc_torque;      /* LC torque limit (0.1 Nm) */
-    int32_t map_torque;     /* Map torque (0.1 Nm) */
-    float vehicle_speed;    /* Front wheel speed (m/s) */
-    float rear_wheel_speed; /* Motor wheel speed (m/s) */
-    uint8_t sensor_healthy; /* Wheel speed CAN active */
-    uint8_t slip_rate_cut;  /* Slip rate cut active */
-} lc_debug_t;
 
-void lc_init(void);
+    lc_ff_t ff;
+    lc_pid_t pid;
+} lc_data_t;
+
+void lc_init(lc_data_t* data);
 
 /* Returns commanded torque (0.1 Nm) */
 int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_combined);
@@ -112,7 +126,7 @@ int32_t lc_update(int32_t driver_torque, uint32_t motor_speed_rpm, float tps_com
 void lc_feed_wheel_speed(uint16_t front_left_speed_x10);
 
 void lc_feed_tick(uint32_t tick_ms);
-const lc_debug_t *lc_get_debug(void);
+const lc_data_t *lc_get_debug(void);
 lc_state_t lc_get_state(void);
 extern volatile uint8_t launch_control_enable;
 

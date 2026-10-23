@@ -22,41 +22,6 @@ static const uint16_t lc_map_torque[LC_MAP_SIZE] = {10, 10, 10, 10, 10, 10, 10, 
 #define LC_LIMITED_DRIVELINE_FINAL_TORQUE_NM (LC_LASH_TAKEUP_FINAL_TORQUE_NM + LC_DRIVELINE_RAMP_RATE_NMPS * LC_LIMITED_DRIVELINE_TIME_MS * 0.001f)
 #define LC_LIMITED_TRACTION_FINAL_TORQUE_NM (LC_LIMITED_DRIVELINE_FINAL_TORQUE_NM + LC_TRACTION_RAMP_RATE_NMPS * LC_LIMITED_TRACTION_TIME_MS * 0.001f)
 
-static uint32_t map_interp(const uint16_t *bp, const uint16_t *val, int n, uint32_t x)
-{
-    if (x <= bp[0]) {
-        return val[0];
-    }
-    if (x >= bp[n - 1]) {
-        return val[n - 1];
-    }
-
-    for (int i = 0; i < n - 1; i++) {
-        if (x < bp[i + 1]) {
-            const uint32_t bp_lo = bp[i];
-            const uint32_t bp_hi = bp[i + 1];
-            const uint32_t val_lo = val[i];
-            const uint32_t val_hi = val[i + 1];
-            const uint32_t bp_range = bp_hi - bp_lo;
-
-            if (bp_range == 0) {
-                return val_lo;
-            }
-
-            const int32_t val_range = (int32_t)val_hi - (int32_t)val_lo;
-            const uint32_t offset = x - bp_lo;
-            return (uint32_t)((int32_t)val_lo + (val_range * (int32_t)offset) / (int32_t)bp_range);
-        }
-    }
-
-    return val[n - 1];
-}
-
-static uint32_t lc_map_lookup(uint32_t motor_speed_rpm)
-{
-    return map_interp(lc_map_rpm, lc_map_torque, LC_MAP_SIZE, motor_speed_rpm);
-}
-
 static volatile float front_wheel_speed_ms = 0.0f;
 static volatile uint32_t last_wheel_speed_tick = 0;
 static volatile uint32_t current_tick_ms = 0;
@@ -105,26 +70,35 @@ static void lc_enter_armed(void)
     lc_reset_pid();
 }
 
-void lc_init(void)
+void lc_init(lc_data_t* data)
 {
+	*data = (lc_data_t){
+		.state = LC_STATE_ARMED,
+		.wss_l = (lc_wss_t){
+			sensor_online = 0,
+			sensor_reliable = 0,
+
+		},
+		.pid = (lc_pid_t){
+			slip_ratio_raw = 0.0f,
+			slip_ratio_filtered = 0.0f,
+
+			p = 0.0f,
+			i = 0.0f,
+			d = 0.0f
+		}
+	};
+
 	ol_abort = 0;
 
     dbg.state = LC_STATE_ARMED;
-    dbg.slip_ratio = 0.0f;
-    dbg.slip_ratio_raw = 0.0f;
-    dbg.slip_rate = 0.0f;
-    dbg.pid_p_term = 0.0f;
-    dbg.pid_i_term = 0.0f;
-    dbg.pid_d_term = 0.0f;
-    dbg.pid_output = 0.0f;
+
     dbg.lc_torque = 0;
     dbg.map_torque = 0;
     dbg.vehicle_speed = 0.0f;
     dbg.rear_wheel_speed = 0.0f;
     dbg.sensor_healthy = 0;
-    dbg.slip_rate_cut = 0;
-    dbg.dt_s = LC_DT_S;
-    prev_slip_ratio = 0.0f;
+
     was_launching = 0;
     exit_latched = 0;
     last_update_tick = 0;
