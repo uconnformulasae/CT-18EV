@@ -38,7 +38,7 @@
 #define BPS_FAULT_HIGH 4.75f
 
 /* AiM MC-327 brake pressure sensor, 0.5-4.5 V = 0-2000 psi */
-#define BPS_0PSI_V   0.5f
+#define BPS_0PSI_V   0.55f
 #define BPS_FULL_V   4.5f
 #define BPS_FULL_PSI 2000.0f
 
@@ -49,7 +49,7 @@
 #define BPS_TX_MS 50u
 
 #define BSE_TRIP_TPS  0.25f
-#define BSE_CLEAR_TPS 0.05f
+#define BSE_CLEAR_TPS 0.20f
 
 /* Regen (one-pedal) enable (1 = enabled, 0 = disabled) */
 #ifndef REGEN_ENABLE
