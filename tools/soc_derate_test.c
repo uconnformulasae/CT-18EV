@@ -89,6 +89,8 @@ static void check_tune(const char *name, soc_derate_tune_t t)
 
     snprintf(what, sizeof(what), "%s: has points", name);
     check(t.soc.n >= 1, what);
+    snprintf(what, sizeof(what), "%s: weak_cell within 0-1", name);
+    check(t.weak_cell >= 0.0f && t.weak_cell <= 1.0f, what);
 
     for (int i = 0; i < t.soc.n; i++) {
         snprintf(what, sizeof(what), "%s: point %d SoC within 0-1", name, i);
@@ -182,8 +184,19 @@ static void test_gap(void)
     const uint32_t dcl = soc_derate_dcl(kf_at(soc, KF_OK), BMS_DCL, 0u, STEP_MS);
     check(want_gap > 0.02f, "test cell is noticeably low");
     check_near(soc_derate_get_debug()->gap, want_gap, 1e-4f, "first reading applies at once");
-    check_near(soc_derate_get_debug()->weak_soc, soc - want_gap, 1e-4f, "weak cell soc");
-    check_eq(dcl, expected_dcl(soc - want_gap), "map runs on weak cell soc");
+    const float w = tune->weak_cell;
+    check_near(soc_derate_get_debug()->map_soc, soc - w * want_gap, 1e-4f, "map soc");
+    check_eq(dcl, expected_dcl(soc - w * want_gap), "map runs on weighted gap");
+
+    /* Same gap where the curve slopes, between the curve ends */
+    const soc_derate_pt_t *p = tune->soc.pts;
+    const float mid = 0.5f * (p[0].x + p[tune->soc.n - 1].x);
+    soc_derate_init();
+    soc_derate_feed_cells(raw(low_v), raw(avg_v), 0u);
+    const uint32_t dcl_mid = soc_derate_dcl(kf_at(mid, KF_OK), BMS_DCL, 0u, STEP_MS);
+    check_eq(dcl_mid, expected_dcl(mid - w * want_gap), "weighted gap mid curve");
+    check(dcl_mid <= expected_dcl(mid), "gap never raises the limit");
+    check(dcl_mid >= expected_dcl(mid - want_gap), "never below the weakest cell limit");
 
     /* Pack rebalances: gap decays with the filter time constant */
     uint32_t t = 0;
@@ -291,7 +304,7 @@ static void test_pack(void)
     check_eq((b[1] >> 1) & 0x01, 1, "cell live bit");
     check_eq(b[1] & 0xFC, 0, "unused bits clear");
     check_eq(b[2] | b[3] << 8, (long)dcl, "dcl");
-    check_eq(b[4] | b[5] << 8, lroundf(d->weak_soc * 10000.0f), "weak soc 0.01%");
+    check_eq(b[4] | b[5] << 8, lroundf(d->map_soc * 10000.0f), "map soc 0.01%");
     check_eq(b[6] | b[7] << 8, lroundf(d->gap * 10000.0f), "gap 0.01%");
 
     soc_derate_dcl(kf_at(0.5f, 0), 300u, 0u, STEP_MS);
@@ -304,12 +317,12 @@ static void test_pack(void)
     soc_derate_feed_cells(raw(3.0f), raw(4.1f), 0u);
     soc_derate_dcl(kf_at(0.0f, KF_OK), BMS_DCL, 0u, STEP_MS);
     soc_derate_pack_debug(b);
-    check_eq(b[4] | b[5] << 8, 0, "negative weak soc clamps to 0");
+    check_eq(b[4] | b[5] << 8, 0, "negative map soc clamps to 0");
 
     soc_derate_init();
     soc_derate_dcl(kf_at(7.0f, KF_OK), BMS_DCL, 0u, STEP_MS);
     soc_derate_pack_debug(b);
-    check_eq(b[4] | b[5] << 8, 65535, "out of range weak soc saturates high");
+    check_eq(b[4] | b[5] << 8, 65535, "out of range map soc saturates high");
 }
 
 int main(void)

@@ -12,10 +12,10 @@
 
 /* APPS calibration (V at ADC pin) */
 #define TPS1_0PER   1.40f
-#define TPS1_100PER 2.60f
+#define TPS1_100PER 2.45f
 
 #define TPS2_0PER   0.620f
-#define TPS2_100PER 1.8f
+#define TPS2_100PER 1.7f
 
 /* APPS out-of-range thresholds (V) */
 #define TPS1_FAULT_LOW  1.30f

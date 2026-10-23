@@ -24,12 +24,13 @@ typedef struct {
 
 typedef struct {
     uint8_t id;
+    float weak_cell; /* Gap weight, 0 = pack SoC only, 1 = weakest cell */
     soc_derate_curve_t soc;
 } soc_derate_tune_t;
 
 typedef struct {
     float gap;      /* Avg cell SoC minus weakest cell SoC */
-    float weak_soc; /* KF SoC minus gap */
+    float map_soc;  /* KF SoC minus weighted gap */
     uint32_t dcl;
     uint8_t src;
     uint8_t cell_live;
