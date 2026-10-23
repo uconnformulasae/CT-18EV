@@ -1,5 +1,5 @@
 /*
- * inv.h
+ * resolver_feedback.h
  *
  *  Created on: Oct 23, 2026
  *      Author: Madelyn
@@ -12,9 +12,12 @@
 
 typedef struct resolver_feedback {
 	sensor_status_t sensor_status; 	// sensor validity
-
-	float motor_speed;				// motor rpm from inverter broadcast (rpm)
-	float wheel_speed;				// rear wheel speed calculated from inverter speed broadcast (m/s)
+	volatile int32_t motor_speed;	// motor rpm from inverter resolver broadcast (rpm)
 } resolver_feedback_t;
+
+void init_resolver_feedback(resolver_feedback_t* self);
+void feed_resolver_feedback(resolver_feedback_t* self, int32_t raw_motor_speed);
+
+float get_rear_wheel_speed(resolver_feedback_t* self);
 
 #endif /* INC_INV_H_ */
