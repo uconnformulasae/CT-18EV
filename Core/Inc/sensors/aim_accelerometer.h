@@ -26,7 +26,7 @@ typedef struct aim_accelerometer {
 
 void aim_accelerometer_init(aim_accelerometer_t* self);
 void aim_accelerometer_calibrate(aim_accelerometer_t* self);
-void aim_accelerometer_feed(aim_accelerometer_t* self, int32_t raw_accel_x, int32_t raw_accel_y, int32_t raw_accel_z);
+void aim_accelerometer_feed(aim_accelerometer_t* self, int32_t accel_x_raw, int32_t accel_y_raw, int32_t accel_z_raw);
 
 float aim_accelerometer_get_accel_x(aim_accelerometer_t* self);
 float aim_accelerometer_get_accel_y(aim_accelerometer_t* self);

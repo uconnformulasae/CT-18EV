@@ -15,9 +15,9 @@ typedef struct resolver_feedback {
 	volatile int32_t motor_speed;	// motor rpm from inverter resolver broadcast (rpm)
 } resolver_feedback_t;
 
-void init_resolver_feedback(resolver_feedback_t* self);
-void feed_resolver_feedback(resolver_feedback_t* self, int32_t raw_motor_speed);
+void resolver_feedback_init(resolver_feedback_t* self);
+void resolver_feedback_feed(resolver_feedback_t* self, int32_t raw_motor_speed);
 
-float get_rear_wheel_speed(resolver_feedback_t* self);
+float resolver_feedback_speed(resolver_feedback_t* self);
 
 #endif /* INC_INV_H_ */

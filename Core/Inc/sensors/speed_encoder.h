@@ -10,15 +10,17 @@
 
 #include "sensors/sensor_status.h"
 
+#define SPEED_ENCODER_PPR 36 // TODO: Update when tone ring is machined
+
 typedef struct speed_encoder {
 	sensor_status_t sensor_status; 	// sensor validity
-	uint16_t edges_seen;			// number of edges seen
-	uint32_t edge_microseconds;		// timestamp of last received edge (us)
-
-	float wheel_speed;				// computed wheel speed from encoder edge period (m/s)
+	volatile uint16_t edges_seen;	// number of edges seen
+	volatile uint32_t last_edge_us;	// timestamp of last received edge (us)
+	volatile uint32_t period_measurement_us;
 } speed_encoder_t;
 
 void init_speed_encoder(speed_encoder_t* self);
-void feed_speed_encoder(speed_encoder_t* self, uint32_t raw_period_us);
+void feed_speed_encoder(speed_encoder_t* self, uint32_t current_edge_us);
+float speed_encoder_get_front_wheel_speed(speed_encoder_t* self);
 
 #endif /* INC_WSS_H_ */
