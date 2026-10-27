@@ -5,8 +5,8 @@
  *      Author: Madelyn
  */
 
+#include <sensors/car_constants.h>
 #include "sensors/resolver_feedback.h"
-#include "sensors/conversion_factors.h"
 #include "math.h"
 
 void resolver_feedback_init(resolver_feedback_t* self) {

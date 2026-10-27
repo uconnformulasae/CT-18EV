@@ -5,8 +5,8 @@
  *      Author: Madelyn
  */
 
-#ifndef INC_IMU_H_
-#define INC_IMU_H_
+#ifndef INC_AIM_ACCELEROMETER_H_
+#define INC_AIM_ACCELEROMETER_H_
 
 #include "sensors/sensor_status.h"
 
@@ -14,7 +14,6 @@
 #define SENSOR_AIM_ACCEL_SCALE 100.0f
 
 typedef struct aim_accelerometer {
-	sensor_status_t sensor_status;	// sensor validity
 	int32_t accel_x_bias;			// longitudinal zero-bias at standstill
 	int32_t accel_y_bias;			// lateral zero-bias at standstill
 	int32_t accel_z_bias;			// vertical zero-bias at standstill
@@ -32,4 +31,4 @@ float aim_accelerometer_get_accel_x(aim_accelerometer_t* self);
 float aim_accelerometer_get_accel_y(aim_accelerometer_t* self);
 float aim_accelerometer_get_accel_z(aim_accelerometer_t* self);
 
-#endif /* INC_IMU_H_ */
+#endif /* INC_AIM_ACCELEROMETER_H_ */

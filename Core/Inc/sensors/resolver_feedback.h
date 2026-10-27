@@ -8,10 +8,7 @@
 #ifndef INC_INV_H_
 #define INC_INV_H_
 
-#include "sensors/sensor_status.h"
-
 typedef struct resolver_feedback {
-	sensor_status_t sensor_status; 	// sensor validity
 	volatile int32_t motor_speed;	// motor rpm from inverter resolver broadcast (rpm)
 } resolver_feedback_t;
 
