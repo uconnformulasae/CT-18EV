@@ -12,6 +12,8 @@
 #include <stdint.h>
 #include <math.h>
 
+#define SPEED_ENCODER_PPR 36 // TODO: Update when tone rings are machined
+
 typedef struct speed_encoder {
 	volatile uint32_t encoder_count_raw;
 	volatile uint32_t period_us_raw;
