@@ -9,6 +9,7 @@
 #define INC_INV_H_
 
 #include <stdbool.h>
+#include <stdint.h>
 
 typedef struct resolver_feedback {
 	volatile int32_t motor_speed_raw;	// motor rpm from inverter resolver broadcast (rpm)
