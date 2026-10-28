@@ -6,7 +6,7 @@
  */
 
 
-#include "aim_accelerometer.h"
+#include "sensors/aim_accelerometer.h"
 
 // TODO: Calibrate reference biases on level ground in shop
 

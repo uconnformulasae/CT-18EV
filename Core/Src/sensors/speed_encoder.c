@@ -36,5 +36,5 @@ void speed_encoder_upkeep(speed_encoder_t* self) {
 	// TODO: sensor sanity checks
 
 	float rpm = 60.0f/(SPEED_ENCODER_PPR * self->period_us_raw * SECONDS_PER_MICROSECOND);
-	self->front_velocity_mps = rpm * WHEEL_RPM_TO_MPS;
+	self->front_velocity = rpm * WHEEL_RPM_TO_MPS;
 }

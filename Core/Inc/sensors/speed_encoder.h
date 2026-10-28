@@ -9,8 +9,8 @@
 #define INC_WSS_H_
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <math.h>
-#include "sensors/sensor_status.h"
 
 typedef struct speed_encoder {
 	volatile uint32_t encoder_count_raw;
