@@ -10,14 +10,15 @@
 
 #include "sensors/sensor_status.h"
 #include <stdbool.h>
+#include <stdint.h>
 
 #define SENSOR_AIM_ACCEL_CAN_ID 0x301
 #define SENSOR_AIM_ACCEL_SCALE 100.0f
 
 typedef struct aim_accelerometer {
-	volatile int32_t raw_accel_x;	// longitudinal acceleration reading (0.01 * m/s^2)
-	volatile int32_t raw_accel_y;	// lateral acceleration reading (0.01 * m/s^2)
-	volatile int32_t raw_accel_z;	// vertical acceleration reading (0.01 * m/s^2)
+	volatile int32_t accel_x_raw;	// longitudinal acceleration reading (0.01 * m/s^2)
+	volatile int32_t accel_y_raw;	// lateral acceleration reading (0.01 * m/s^2)
+	volatile int32_t accel_z_raw;	// vertical acceleration reading (0.01 * m/s^2)
 	volatile bool data_ready;		// fresh unread data flag
 
 	int32_t accel_x_bias;			// longitudinal zero-bias at standstill
