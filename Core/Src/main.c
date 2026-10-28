@@ -165,8 +165,9 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
 	} else if (RxHeader.StdId == CAN_ID_RX_MOTOR_SPEED) {
 		int16_t motor_speed_raw = (int16_t) (uint16_t) (RxData[3] << 8
 				| RxData[2]);
+
+		resolver_feedback_feed(&resolver_feedback, motor_speed_raw);
 		motor_speed = (motor_speed_raw > 0) ? (uint32_t) motor_speed_raw : 0u;
-		resolver_feedback_feed(&resolver_feedback, motor_speed);
 		motor_speed_tick = HAL_GetTick();
 	} else if (RxHeader.StdId == CAN_ID_RX_BMS_DCL) {
 		uint16_t dcl_raw = (uint16_t) (RxData[1] << 8 | RxData[0]);
