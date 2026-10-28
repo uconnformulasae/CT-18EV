@@ -39,7 +39,7 @@ void aim_accelerometer_feed(aim_accelerometer_t* self, int32_t accel_x_raw, int3
 }
 
 void aim_accelerometer_upkeep(aim_accelerometer_t* self) {
-	if(!data_ready) return;
+	if(!self->data_ready) return;
 	self->data_ready = false;
 
 	// TODO: Sensor sanity checks
