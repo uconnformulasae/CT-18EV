@@ -6,20 +6,24 @@
  */
 
 
-#include "aim_accelerometer.h"
+#include "sensors/aim_accelerometer.h"
 
 // TODO: Calibrate reference biases on level ground in shop
 
 void aim_accelerometer_init(aim_accelerometer_t* self) {
 	*self = (aim_accelerometer_t){
-		.sensor_status = make_sensor_status(),
+		.accel_x_raw = 0,
+		.accel_y_raw = 0,
+		.accel_z_raw = 0,
+		.data_ready = false,
+
 		.accel_x_bias = 0,
 		.accel_y_bias = 0,
 		.accel_z_bias = 0,
 
-		.accel_x_raw = 0,
-		.accel_y_raw = 0,
-		.accel_z_raw = 0
+		.accel_x = 0,
+		.accel_y = 0,
+		.accel_z = 0
 	};
 }
 
@@ -31,15 +35,16 @@ void aim_accelerometer_feed(aim_accelerometer_t* self, int32_t accel_x_raw, int3
 	self->accel_x_raw = accel_x_raw;
 	self->accel_y_raw = accel_y_raw;
 	self->accel_z_raw = accel_z_raw;
+	self->data_ready = true;
 }
 
-float aim_accelerometer_get_accel_x(aim_accelerometer_t* self) {
-	return self->accel_x_raw * SENSOR_AIM_ACCEL_SCALE;
-}
-float aim_accelerometer_get_accel_y(aim_accelerometer_t* self) {
-	return self->accel_y_raw * SENSOR_AIM_ACCEL_SCALE;
-}
+void aim_accelerometer_upkeep(aim_accelerometer_t* self) {
+	if(!self->data_ready) return;
+	self->data_ready = false;
 
-float aim_accelerometer_get_accel_z(aim_accelerometer_t* self) {
-	return self->accel_z_raw * SENSOR_AIM_ACCEL_SCALE;
+	// TODO: Sensor sanity checks
+
+	self->accel_x = (self->accel_x_raw - self->accel_x_bias) / SENSOR_AIM_ACCEL_SCALE;
+	self->accel_y = (self->accel_y_raw - self->accel_y_bias) / SENSOR_AIM_ACCEL_SCALE;
+	self->accel_z = (self->accel_z_raw - self->accel_z_bias) / SENSOR_AIM_ACCEL_SCALE;
 }
