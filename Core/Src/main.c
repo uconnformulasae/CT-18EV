@@ -36,7 +36,8 @@
 #include "version.h"
 
 #include "sensors/aim_accelerometer.h"
-
+#include "sensors/resolver_feedback.h"
+#include "sensors/speed_encoder.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -120,6 +121,9 @@ static uint8_t reset_cause = 0;
 
 /* Sensors */
 aim_accelerometer_t aim_accelerometer;
+resolver_feedback_t resolver_feedback;
+speed_encoder_t encoder_left;
+speed_encoder_t encoder_right;
 
 static uint8_t read_reset_cause(void) {
 	uint8_t cause = 0;
@@ -339,7 +343,11 @@ int main(void)
 	soc_kf_init();
 	soc_derate_init();
 	control_init(&ctrl);
+
 	aim_accelerometer_init(&aim_accelerometer);
+	resolver_feedback_init(&resolver_feedback);
+	speed_encoder_init(&encoder_left);
+	speed_encoder_init(&encoder_right);
 
   /* USER CODE END 2 */
 
@@ -431,6 +439,11 @@ int main(void)
 
 		const soc_kf_debug_t *kf = soc_kf_get_debug();
 		current_limit = soc_derate_dcl(kf, bms_dcl, loop_tick, loop_dt_ms);
+
+		aim_accelerometer_upkeep(&aim_accelerometer);
+		resolver_feedback_upkeep(&resolver_feedback);
+		speed_encoder_upkeep(&encoder_left);
+		speed_encoder_upkeep(&encoder_right);
 
 		torque_request = control_torque_limit(control_torque_map(tps_combined),
 				motor_speed, current_limit);
