@@ -1,0 +1,38 @@
+/*
+ * aim_accelerometer.h
+ *
+ *  Created on: Oct 23, 2026
+ *      Author: Madelyn
+ */
+
+#ifndef INC_AIM_ACCELEROMETER_H_
+#define INC_AIM_ACCELEROMETER_H_
+
+#include "sensors/sensor_status.h"
+#include <stdbool.h>
+#include <stdint.h>
+
+#define SENSOR_AIM_ACCEL_CAN_ID 0x301
+#define SENSOR_AIM_ACCEL_SCALE 100.0f
+
+typedef struct aim_accelerometer {
+	volatile int32_t accel_x_raw;	// longitudinal acceleration reading (0.01 * m/s^2)
+	volatile int32_t accel_y_raw;	// lateral acceleration reading (0.01 * m/s^2)
+	volatile int32_t accel_z_raw;	// vertical acceleration reading (0.01 * m/s^2)
+	volatile bool data_ready;		// fresh unread data flag
+
+	int32_t accel_x_bias;			// longitudinal zero-bias at standstill
+	int32_t accel_y_bias;			// lateral zero-bias at standstill
+	int32_t accel_z_bias;			// vertical zero-bias at standstill
+
+	float accel_x;					// longitudinal acceleration corrected with bias (m/s^2)
+	float accel_y;					// lateral acceleration corrected with bias (m/s^2)
+	float accel_z;					// vertical acceleration corrected with bias (m/s^2)
+} aim_accelerometer_t;
+
+void aim_accelerometer_init(aim_accelerometer_t* self);
+void aim_accelerometer_calibrate(aim_accelerometer_t* self);
+void aim_accelerometer_feed(aim_accelerometer_t* self, int32_t accel_x_raw, int32_t accel_y_raw, int32_t accel_z_raw);
+void aim_accelerometer_upkeep(aim_accelerometer_t* self);
+
+#endif /* INC_AIM_ACCELEROMETER_H_ */

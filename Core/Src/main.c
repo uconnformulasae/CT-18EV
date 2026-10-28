@@ -28,12 +28,16 @@
 #include "adc.h"
 #include "can_tx.h"
 #include "rtd.h"
-#include "launch_control.h"
+#include "assists/launch_control.h"
 #include "regen.h"
 #include "soc_kf.h"
 #include "soc_derate.h"
 #include "control.h"
 #include "version.h"
+
+#include "sensors/aim_accelerometer.h"
+#include "sensors/resolver_feedback.h"
+#include "sensors/speed_encoder.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -115,6 +119,12 @@ static uint8_t lc_was_enabled = 0;
 static control_t ctrl;
 static uint8_t reset_cause = 0;
 
+/* Sensors */
+aim_accelerometer_t aim_accelerometer;
+resolver_feedback_t resolver_feedback;
+speed_encoder_t encoder_left;
+speed_encoder_t encoder_right;
+
 static uint8_t read_reset_cause(void) {
 	uint8_t cause = 0;
 	if (__HAL_RCC_GET_FLAG(RCC_FLAG_PINRST)) {
@@ -171,6 +181,12 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
 	} else if (RxHeader.StdId == LC_AIM_WHEEL_SPEED_CAN_ID) {
 		uint16_t fl_speed = RxData[1] << 8 | RxData[0];
 		lc_feed_wheel_speed(fl_speed);
+	} else if (RxHeader.StdId == SENSOR_AIM_ACCEL_CAN_ID) {
+		int16_t raw_accel_x = (int16_t)((RxData[1] << 8 | RxData[0]));
+		int16_t raw_accel_y = (int16_t)((RxData[3] << 8 | RxData[2]));
+		int16_t raw_accel_z = (int16_t)((RxData[5] << 8 | RxData[4]));
+
+		aim_accelerometer_feed(&aim_accelerometer, raw_accel_x, raw_accel_y, raw_accel_z);
 	}
 }
 
@@ -299,6 +315,17 @@ int main(void)
 	canfilterconfig.FilterScale = CAN_FILTERSCALE_32BIT;
 	HAL_CAN_ConfigFilter(&hcan, &canfilterconfig);
 
+	canfilterconfig.FilterActivation = CAN_FILTER_ENABLE;
+	canfilterconfig.FilterBank = 8; /* AiM Accelerometer */
+	canfilterconfig.FilterFIFOAssignment = CAN_RX_FIFO0;
+	canfilterconfig.FilterIdHigh = SENSOR_AIM_ACCEL_CAN_ID << 5;
+	canfilterconfig.FilterIdLow = 0;
+	canfilterconfig.FilterMaskIdHigh = CAN_STID_MASK_HIGH;
+	canfilterconfig.FilterMaskIdLow = CAN_STID_MASK_LOW;
+	canfilterconfig.FilterMode = CAN_FILTERMODE_IDMASK;
+	canfilterconfig.FilterScale = CAN_FILTERSCALE_32BIT;
+	HAL_CAN_ConfigFilter(&hcan, &canfilterconfig);
+
 	HAL_CAN_Start(&hcan);
 
 	if (HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING)
@@ -316,6 +343,12 @@ int main(void)
 	soc_kf_init();
 	soc_derate_init();
 	control_init(&ctrl);
+
+	aim_accelerometer_init(&aim_accelerometer);
+	resolver_feedback_init(&resolver_feedback);
+	speed_encoder_init(&encoder_left);
+	speed_encoder_init(&encoder_right);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -406,6 +439,11 @@ int main(void)
 
 		const soc_kf_debug_t *kf = soc_kf_get_debug();
 		current_limit = soc_derate_dcl(kf, bms_dcl, loop_tick, loop_dt_ms);
+
+		aim_accelerometer_upkeep(&aim_accelerometer);
+		resolver_feedback_upkeep(&resolver_feedback);
+		speed_encoder_upkeep(&encoder_left);
+		speed_encoder_upkeep(&encoder_right);
 
 		torque_request = control_torque_limit(control_torque_map(tps_combined),
 				motor_speed, current_limit);
