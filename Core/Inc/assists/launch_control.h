@@ -98,6 +98,8 @@ typedef struct {
     float rear_wheel_speed; /* Motor wheel speed (m/s) */
     uint8_t sensor_healthy; /* Wheel speed CAN active */
     uint8_t slip_rate_cut;  /* Slip rate cut active */
+    uint16_t accel_x;
+    float ground_velocity_estimate;
 } lc_debug_t;
 
 void lc_init(void);

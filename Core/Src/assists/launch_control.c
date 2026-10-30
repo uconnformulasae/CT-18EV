@@ -124,6 +124,8 @@ void lc_init(void)
     dbg.sensor_healthy = 0;
     dbg.slip_rate_cut = 0;
     dbg.dt_s = LC_DT_S;
+    dbg.accel_x = 0;
+    dbg.ground_velocity_estimate = 0;
     prev_slip_ratio = 0.0f;
     was_launching = 0;
     exit_latched = 0;
@@ -137,6 +139,10 @@ void lc_feed_wheel_speed(uint16_t front_left_speed_x10)
 	front_wheel_speed_ms = (float)front_left_speed_x10 * LC_KMH10_TO_MS;
 	    last_wheel_speed_tick = current_tick_ms;
 #endif
+}
+
+void lc_feed_longitudinal_accel(uint16_t accel_x) {
+	dbg.accel_x
 }
 
 void lc_feed_tick(uint32_t tick_ms)
