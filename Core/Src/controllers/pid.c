@@ -31,7 +31,7 @@ float pid_update(pid_controller_t* self, float measurement, float dt) {
 	float error = self->setpoint - measurement;
 
 	float p_term = self->kp * error;
-	float i_term = self->i + self->ki * error * dt;
+	float i_term = self->i_term + self->ki * error * dt;
 
 	// lowpass filtered derivative (s)/(tau*s+1) discretized under backwards-euler
 	float a = self->derivative_tau/(self->derivative_tau + dt);
@@ -48,7 +48,7 @@ float pid_update(pid_controller_t* self, float measurement, float dt) {
 		if (error < 0.0f) {
 			self->i_term = i_term;
 		}
-	} else if (output < self->saturation_low) {
+	} else if (candidate_output < self->saturation_low) {
 		if (error > 0.0f) {
 			self->i_term = i_term;
 		}
@@ -69,7 +69,7 @@ float pid_update(pid_controller_t* self, float measurement, float dt) {
 	self->has_previous = true;
 
 	// clamp and commit the final output
-	self->output = fmaxf(fminf(self->p + self->i + self->d, pid->saturation_high), pid->saturation_low);
+	self->output = fmaxf(fminf(self->p_term + self->i_term + self->d_term, pid->saturation_high), pid->saturation_low);
 
 	return self->output;
 }
