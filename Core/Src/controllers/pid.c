@@ -6,6 +6,7 @@
  */
 
 #include "controllers/pid.h"
+#include <math.h>
 
 void pid_set(pid_controller_t* self, float setpoint) {
 	self->setpoint = setpoint;
@@ -69,7 +70,7 @@ float pid_update(pid_controller_t* self, float measurement, float dt) {
 	self->has_previous = true;
 
 	// clamp and commit the final output
-	self->output = fmaxf(fminf(self->p_term + self->i_term + self->d_term, pid->saturation_high), pid->saturation_low);
+	self->output = fmaxf(fminf(self->p_term + self->i_term + self->d_term, self->saturation_high), self->saturation_low);
 
 	return self->output;
 }
