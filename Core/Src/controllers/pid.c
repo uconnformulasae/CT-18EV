@@ -12,9 +12,9 @@ void pid_set(pid_controller_t* self, float setpoint) {
 }
 
 void pid_reset(pid_controller_t* self) {
-	self->p = 0;
-	self->i = 0;
-	self->d = 0;
+	self->p_term = 0;
+	self->i_term = 0;
+	self->d_term = 0;
 
 	self->last_measurement = 0;
 	self->last_error = 0;
@@ -36,7 +36,7 @@ float pid_update(pid_controller_t* self, float measurement, float dt) {
 	// lowpass filtered derivative (s)/(tau*s+1) discretized under backwards-euler
 	float a = self->derivative_tau/(self->derivative_tau + dt);
 	float b = 1/(self->derivative_tau + dt);
-	float raw_derivative = a * self->d + b * (measurement - self->last_measurement);
+	float raw_derivative = a * self->d_term + b * (measurement - self->last_measurement);
 	float d_term = self->has_previous ? self->kd * raw_derivative : 0;
 
 	float candidate_output = p_term + i_term + d_term;
