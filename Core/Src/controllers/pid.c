@@ -5,6 +5,7 @@
  *      Author: Madelyn
  */
 
+#include "controllers/pid.h"
 
 void pid_set(pid_controller_t* self, float setpoint) {
 	self->setpoint = setpoint;

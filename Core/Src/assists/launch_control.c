@@ -141,10 +141,6 @@ void lc_feed_wheel_speed(uint16_t front_left_speed_x10)
 #endif
 }
 
-void lc_feed_longitudinal_accel(uint16_t accel_x) {
-	dbg.accel_x
-}
-
 void lc_feed_tick(uint32_t tick_ms)
 {
     current_tick_ms = tick_ms;
