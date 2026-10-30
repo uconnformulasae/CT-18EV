@@ -24,8 +24,8 @@ void pid_reset(pid_controller_t* self) {
 }
 
 float pid_update(pid_controller_t* self, float measurement, float dt) {
-	if (dt <= 0.0f) {
-		// hold the previous output if no time has elapsed
+	if (dt <= 0.0f || isnan(dt) || isfinite(measurement)) {
+		// hold the previous output if no time has elapsed, dt is NaN, or measurement is non-finite
 		return self->output;
 	}
 
@@ -34,11 +34,13 @@ float pid_update(pid_controller_t* self, float measurement, float dt) {
 	float p_term = self->kp * error;
 	float i_term = self->i_term + self->ki * error * dt;
 
-	// lowpass filtered derivative (s)/(tau*s+1) discretized under backwards-euler
+	// lowpass filtered derivative d(measurement)/dt * (s)/(tau*s+1), discretized under backwards-Euler
+	// the raw_derivative and last_derivative variables hold the unscaled term so that kd does not end up in the recursion
+	// kd is applied afterward in d_term
 	float a = self->derivative_tau/(self->derivative_tau + dt);
 	float b = 1/(self->derivative_tau + dt);
-	float raw_derivative = a * self->d_term + b * (measurement - self->last_measurement);
-	float d_term = self->has_previous ? self->kd * raw_derivative : 0;
+	float raw_derivative = self->has_previous ? a * self->last_derivative + b * (measurement - self->last_measurement) : 0;
+	float d_term = -self->kd * raw_derivative;
 
 	float candidate_output = p_term + i_term + d_term;
 
@@ -56,6 +58,9 @@ float pid_update(pid_controller_t* self, float measurement, float dt) {
 	} else {
 		self->i_term = i_term;
 	}
+
+	// clamp overall integral term to saturation limits
+	self->i_term = fmaxf(fminf(i_term, self->saturation_high), self->saturation_low);
 
 	self->d_term = d_term;
 
