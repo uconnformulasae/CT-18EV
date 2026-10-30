@@ -11,10 +11,10 @@
 #define ADC_BPS_V_PER_COUNT (ADC_BPS_VREF_V / ADC_FULL_SCALE_COUNTS)
 
 /* APPS calibration (V at ADC pin) */
-#define TPS1_0PER   1.40f
-#define TPS1_100PER 2.45f
+#define TPS1_0PER   1.47f
+#define TPS1_100PER 2.50f
 
-#define TPS2_0PER   0.620f
+#define TPS2_0PER   0.650f
 #define TPS2_100PER 1.7f
 
 /* APPS out-of-range thresholds (V) */
