@@ -90,11 +90,11 @@ uint32_t soc_derate_dcl(const soc_kf_debug_t *kf, uint32_t bms_dcl, uint32_t tic
                         uint32_t dt_ms)
 {
     update_gap(tick_ms, dt_ms);
-    dbg.weak_soc = kf->soc - dbg.gap;
+    dbg.map_soc = kf->soc - tune->weak_cell * dbg.gap;
 
     /* BMS asking for 0 A always wins, otherwise the SoC map owns the limit */
     if (soc_kf_valid(kf) && bms_dcl > 0u) {
-        dbg.dcl = to_amps(interp(&tune->soc, dbg.weak_soc));
+        dbg.dcl = to_amps(interp(&tune->soc, dbg.map_soc));
         dbg.src = SOC_DERATE_SRC_SOC;
     } else {
         dbg.dcl = bms_dcl;
@@ -116,15 +116,15 @@ static uint16_t sat_u16(float v)
 
 void soc_derate_pack_debug(uint8_t *d)
 {
-    const uint16_t weak = sat_u16(dbg.weak_soc * 10000.0f);
+    const uint16_t soc = sat_u16(dbg.map_soc * 10000.0f);
     const uint16_t gap = sat_u16(dbg.gap * 10000.0f);
 
     d[0] = tune->id;
     d[1] = (uint8_t)(dbg.src | (dbg.cell_live << 1));
     d[2] = (uint8_t)(dbg.dcl & 0xFF);
     d[3] = (uint8_t)(dbg.dcl >> 8);
-    d[4] = (uint8_t)(weak & 0xFF);
-    d[5] = (uint8_t)(weak >> 8);
+    d[4] = (uint8_t)(soc & 0xFF);
+    d[5] = (uint8_t)(soc >> 8);
     d[6] = (uint8_t)(gap & 0xFF);
     d[7] = (uint8_t)(gap >> 8);
 }

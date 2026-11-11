@@ -11,21 +11,21 @@
 #define ADC_BPS_V_PER_COUNT (ADC_BPS_VREF_V / ADC_FULL_SCALE_COUNTS)
 
 /* APPS calibration (V at ADC pin) */
-#define TPS1_0PER   1.39f
-#define TPS1_100PER 2.40f
+#define TPS1_0PER   1.385f
+#define TPS1_100PER 2.601f
 
-#define TPS2_0PER   0.62f
-#define TPS2_100PER 1.64f
+#define TPS2_0PER   0.620f
+#define TPS2_100PER 1.8f
 
 /* APPS out-of-range thresholds (V) */
-#define TPS1_FAULT_LOW  0.2f
-#define TPS1_FAULT_HIGH 2.8f
+#define TPS1_FAULT_LOW  1.385f
+#define TPS1_FAULT_HIGH 2.601f
 
-#define TPS2_FAULT_LOW  0.2f
-#define TPS2_FAULT_HIGH 2.8f
+#define TPS2_FAULT_LOW  0.620f
+#define TPS2_FAULT_HIGH 1.8f
 
 /* Max APPS disagreement (FSAE T.4.2.4) */
-#define APPS_TRIP_PERCENT 0.10f
+#define APPS_TRIP_PERCENT 0.50f
 
 /* TPS filter weight (0 = disabled) */
 #define TPS_IIR_RATIO 0.0f
@@ -38,7 +38,7 @@
 #define BPS_FAULT_HIGH 4.75f
 
 /* AiM MC-327 brake pressure sensor, 0.5-4.5 V = 0-2000 psi */
-#define BPS_0PSI_V   0.5f
+#define BPS_0PSI_V   0.55f
 #define BPS_FULL_V   4.5f
 #define BPS_FULL_PSI 2000.0f
 
@@ -49,7 +49,7 @@
 #define BPS_TX_MS 50u
 
 #define BSE_TRIP_TPS  0.25f
-#define BSE_CLEAR_TPS 0.05f
+#define BSE_CLEAR_TPS 0.20f
 
 /* Regen (one-pedal) enable (1 = enabled, 0 = disabled) */
 #ifndef REGEN_ENABLE
@@ -57,7 +57,7 @@
 #endif
 
 /* Torque map */
-#define TMAP_DEADBAND_LOW  0.05f
+#define TMAP_DEADBAND_LOW  0.08f
 #define TMAP_REGEN_END     0.35f
 #if REGEN_ENABLE
 #define TMAP_DRIVE_START   0.39f
