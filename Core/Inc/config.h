@@ -21,7 +21,7 @@
 #define TPS1_FAULT_LOW  1.385f
 #define TPS1_FAULT_HIGH 2.601f
 
-#define TPS2_FAULT_LOW  0.620f
+#define TPS2_FAULT_LOW  0.595f
 #define TPS2_FAULT_HIGH 1.8f
 
 /* Max APPS disagreement (FSAE T.4.2.4) */
