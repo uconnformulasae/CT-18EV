@@ -14,7 +14,7 @@
 #define TPS1_0PER   1.385f
 #define TPS1_100PER 2.601f
 
-#define TPS2_0PER   0.620f
+#define TPS2_0PER   0.595f
 #define TPS2_100PER 1.8f
 
 /* APPS out-of-range thresholds (V) */
@@ -28,10 +28,10 @@
 #define APPS_TRIP_PERCENT 0.50f
 
 /* TPS filter weight (0 = disabled) */
-#define TPS_IIR_RATIO 0.0f
+#define TPS_IIR_RATIO 0.05f
 
 /* Brake pressure (BPS) and brake plausibility (BSE) */
-#define BPS_SETPOINT_V 0.700f
+#define BPS_SETPOINT_V 0.800f
 
 /* BPS out-of-range thresholds (V), open or shorted sensor (T.4.3.4) */
 #define BPS_FAULT_LOW  0.25f
@@ -48,7 +48,7 @@
 /* Brake pressure frame period (ms), 20 Hz */
 #define BPS_TX_MS 50u
 
-#define BSE_TRIP_TPS  0.25f
+#define BSE_TRIP_TPS  0.65f
 #define BSE_CLEAR_TPS 0.20f
 
 /* Regen (one-pedal) enable (1 = enabled, 0 = disabled) */
