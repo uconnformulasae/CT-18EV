@@ -28,7 +28,7 @@
 #define APPS_TRIP_PERCENT 0.50f
 
 /* TPS filter weight (0 = disabled) */
-#define TPS_IIR_RATIO 0.05f
+#define TPS_IIR_RATIO 0.0f
 
 /* Brake pressure (BPS) and brake plausibility (BSE) */
 #define BPS_SETPOINT_V 0.800f
