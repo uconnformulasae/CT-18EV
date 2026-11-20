@@ -2,8 +2,6 @@
 #include "config.h"
 #include <math.h>
 
-#define RPM_TO_RAD_S (2.0f * 3.14159265f / 60.0f)
-
 static regen_debug_t dbg;
 
 void regen_init(void)
@@ -26,7 +24,7 @@ static float pedal_factor(float tps)
     return f * f * (3.0f - 2.0f * f);
 }
 
-static float max_regen_nm(uint32_t rpm, float v_pack)
+static float max_regen_nm(uint32_t rpm, uint32_t cpl_w)
 {
     if (rpm <= REGEN_CUTOFF_RPM) {
         return 0.0f;
@@ -36,17 +34,11 @@ static float max_regen_nm(uint32_t rpm, float v_pack)
         fminf((float)(rpm - REGEN_CUTOFF_RPM) / (float)(REGEN_RAMP_RPM - REGEN_CUTOFF_RPM), 1.0f);
 
     const float y = fminf((float)rpm * (100.0f / REGEN_RPM_MAX), 100.0f);
-    const float charge_limit =
-        REGEN_CELL_CHARGE_A * SOC_KF_NP * v_pack / ((float)rpm * RPM_TO_RAD_S);
+    /* CPL is power at the accumulator; taking it all as shaft power (efficiency 1)
+       errs toward less charge current */
+    const float charge_limit = (float)cpl_w / ((float)rpm * RPM_TO_RAD_S);
 
     return ramp * fminf((REGEN_PEAK_NM / 100.0f) * (2.0f * y - y * y / 100.0f), charge_limit);
-}
-
-static float soc_scale(float soc)
-{
-    const float u = (REGEN_SOC_OFF - soc) / (REGEN_SOC_OFF - REGEN_SOC_FULL);
-    const float f = fminf(fmaxf(u, 0.0f), 1.0f);
-    return f * f;
 }
 
 static int32_t slew(int32_t prev, int32_t target, uint32_t dt_ms)
@@ -71,12 +63,12 @@ static int32_t slew(int32_t prev, int32_t target, uint32_t dt_ms)
 #endif
 
 int32_t regen_update(int32_t drive_torque, uint32_t motor_speed_rpm, float tps,
-                     const soc_kf_debug_t *kf, uint8_t cut, uint32_t dt_ms)
+                     const bms_limits_t *lim, uint8_t cut, uint32_t dt_ms)
 {
 #if !REGEN_ENABLE
     (void)motor_speed_rpm;
     (void)tps;
-    (void)kf;
+    (void)lim;
     (void)cut;
     (void)dt_ms;
     dbg.target = drive_torque;
@@ -84,14 +76,15 @@ int32_t regen_update(int32_t drive_torque, uint32_t motor_speed_rpm, float tps,
     dbg.cut = 1;
     return drive_torque;
 #else
-    dbg.soc_ok = soc_kf_valid(kf);
-    dbg.soc_scale = dbg.soc_ok ? soc_scale(kf->soc) : 0.0f;
+    /* The SoC fade lives in the BMS's CPL; CPL 0 is no regen */
+    dbg.limits_live = lim->live;
+    dbg.cpl_w = dbg.limits_live ? lim->cpl_w : 0u;
     dbg.cut = cut;
 
     dbg.pedal = pedal_factor(tps);
-    dbg.max_nm = max_regen_nm(motor_speed_rpm, kf->v_pack);
+    dbg.max_nm = max_regen_nm(motor_speed_rpm, dbg.cpl_w);
 
-    dbg.target = drive_torque - (int32_t)(10.0f * dbg.soc_scale * dbg.pedal * dbg.max_nm);
+    dbg.target = drive_torque - (int32_t)(10.0f * dbg.pedal * dbg.max_nm);
 
     dbg.torque = cut ? drive_torque : slew(dbg.torque, dbg.target, dt_ms);
     return dbg.torque;
@@ -105,8 +98,10 @@ void regen_pack_debug(uint8_t *d)
         d[i] = 0;
     }
 #else
+    const uint32_t cpl_kw = dbg.cpl_w / 1000u;
+
     d[0] = dbg.cut;
-    d[1] = (uint8_t)(dbg.soc_scale * 100.0f);
+    d[1] = (uint8_t)((cpl_kw > 255u) ? 255u : cpl_kw);
     d[2] = (uint8_t)dbg.max_nm;
 #endif
 }

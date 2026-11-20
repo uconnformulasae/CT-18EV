@@ -7,9 +7,7 @@
 #define REGEN_ENABLE 0
 
 #include "../Core/Src/regen.c"
-#include "../Core/Src/soc_kf.c"
 
-#define KF_OK   (SOC_KF_FLAG_INIT | SOC_KF_FLAG_BMS_LIVE)
 #define STEP_MS 5u
 
 static int failures = 0;
@@ -27,14 +25,16 @@ static void check_eq(long got, long want, const char *what)
 static void test_passthrough(void)
 {
     printf("test_passthrough\n");
-    soc_kf_debug_t kf = {.soc = 0.5f, .v_pack = 400.0f, .flags = KF_OK};
+    const bms_limits_t lim = {.dpl_w = 77000u, .cpl_w = 40000u, .live = 1u, .limp = 0u, .why = 0u};
 
     regen_init();
-    check_eq(regen_update(1500, 3000u, 0.8f, &kf, 0u, STEP_MS), 1500, "drive torque untouched");
-    check_eq(regen_update(0, 3000u, 0.0f, &kf, 0u, STEP_MS), 0, "no regen on foot off");
+    check_eq(regen_update(1500, 3000u, 0.8f, &lim, 0u, STEP_MS), 1500, "drive torque untouched");
+    check_eq(regen_update(0, 3000u, 0.0f, &lim, 0u, STEP_MS), 0,
+             "no regen on foot off, CPL ignored");
     check_eq(regen_get_debug()->target, 0, "target is the drive torque");
     check_eq(regen_get_debug()->torque, 0, "torque is the drive torque");
     check_eq(regen_get_debug()->cut, 1, "reports cut");
+    check_eq(regen_get_debug()->max_nm == 0.0f, 1, "regen limit stays 0 (0x55A)");
 }
 
 static void test_pack(void)

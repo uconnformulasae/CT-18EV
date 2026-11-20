@@ -1,6 +1,8 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#include "car_limits.h"
+
 /* ADC scaling */
 #define ADC_FULL_SCALE_COUNTS 4095.0f
 
@@ -70,10 +72,12 @@
 /* Max torque limit (0.1 Nm) */
 #define TORQUE_LIMIT_NM_X10 2200u
 
-/* DC current limit to torque conversion */
-#define TORQUE_POWER_NUM     4200u
-#define TORQUE_SPEED_DIV_MIN 230.4f
-#define TORQUE_RPM_TO_DIV    0.1076f
+/* The BMS's discharge power limit to torque: DPL * DRIVE_EFFICIENCY over the motor
+   speed, floored at TORQUE_W_MIN_RAD_S (2141 rpm, the old floor). A fixed,
+   conservative efficiency; never the pack voltage. */
+#define DRIVE_EFFICIENCY   0.92f
+#define TORQUE_W_MIN_RAD_S 224.24f
+#define RPM_TO_RAD_S       (2.0f * 3.14159265f / 60.0f)
 
 #define TORQUE_HIGH_SPEED_RPM    6000u
 #define TORQUE_HIGH_SPEED_NM_X10 300.0f
@@ -92,32 +96,19 @@
 
 #define MOTOR_SPEED_TIMEOUT_MS 200u
 
-/* Orion SoC: 0.5%/bit */
-#define BMS_SOC_PCT_PER_BIT 0.5f
-
-/* Defaults before BMS/inverter comms */
-#define CURRENT_LIMIT_DEFAULT_A 125u
-#define BUS_VOLTAGE_DEFAULT_V   396u
-
-/* Tunes live in soc_derate_tunes.h */
-#define SOC_DERATE_CELL_STALE_MS 500u
-
 /* The BMS's 0x203 limits older than this are stale: limp */
 #define BMS_LIMITS_STALE_MS 100u
-
-/* Weak cell SoC gap filter time constant (s) */
-#define SOC_DERATE_GAP_TAU_S 60.0f
 
 /* CAN IDs */
 #define CAN_ID_RX_INVERTER_STATE 0x0AA
 #define CAN_ID_RX_MOTOR_SPEED    0x0A5
-#define CAN_ID_RX_BMS_DCL        0x202
-#define CAN_ID_RX_BMS_STATUS     0x600
-#define CAN_ID_RX_BMS_CELL       0x79F
+#define CAN_ID_RX_BMS_LIMITS     CAR_LIMITS_ID
 
 #define CAN_ID_TX_INVERTER_CMD 0x0C0
 #define CAN_ID_TX_DEBUG        0x555
 #define CAN_ID_TX_RTD          0x556
+#define CAN_ID_TX_LOOP         0x558 /* LVCU_Loop: worst loop period (ms) [7] */
+#define CAN_ID_TX_LIMITS       0x55A /* LVCU_Limits, control_pack_limits */
 #define CAN_ID_TX_BPS          0x55C
 
 #define CAN_BPS_DLC 5

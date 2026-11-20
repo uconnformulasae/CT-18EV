@@ -15,18 +15,15 @@
 /.metadata/
 
 # Host test binaries (tools/Makefile).
-/tools/soc_kf_test
 /tools/lc_test
 /tools/can_tx_test
 /tools/rtd_test
 /tools/adc_test
 /tools/regen_test
 /tools/regen_off_test
-/tools/soc_derate_test
 /tools/control_test
 /tools/version_test
 /tools/bms_limits_test
-/tools/soc_kf_replay
 /tools/*.dSYM/
 /tools/cov/
 

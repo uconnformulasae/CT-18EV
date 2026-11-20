@@ -74,10 +74,10 @@ float control_torque_map(float tps)
            (1.0f / (TMAP_DEADBAND_HIGH - TMAP_DRIVE_START));
 }
 
-int32_t control_torque_limit(float x, uint32_t rpm, uint32_t dcl_a)
+int32_t control_torque_limit(float x, uint32_t rpm, uint32_t dpl_w)
 {
-    const float power_limit = (float)(TORQUE_POWER_NUM * dcl_a) /
-                              fmaxf(TORQUE_SPEED_DIV_MIN, (float)rpm * TORQUE_RPM_TO_DIV);
+    const float w = fmaxf(TORQUE_W_MIN_RAD_S, (float)rpm * RPM_TO_RAD_S);
+    const float power_limit = 10.0f * (float)dpl_w * DRIVE_EFFICIENCY / w;
 
     float limit = fminf((float)TORQUE_LIMIT_NM_X10, power_limit);
 
@@ -129,4 +129,28 @@ void control_pack_bps(uint8_t *d, float psi, uint16_t adc, uint8_t pressed, uint
     d[2] = adc & 0xFF;
     d[3] = adc >> 8 & 0xFF;
     d[4] = (uint8_t)((oor << 1) | pressed);
+}
+
+static uint16_t sat_u16(int32_t v)
+{
+    return (v < 0) ? 0u : (v > 0xFFFF) ? 0xFFFFu : (uint16_t)v;
+}
+
+void control_pack_limits(uint8_t *d, int32_t drive_x10, int32_t regen_x10, const bms_limits_t *lim)
+{
+    const uint16_t drive = sat_u16(drive_x10);
+    const uint16_t regen = sat_u16(regen_x10);
+    const uint16_t dpl = car_limits_0p1kw(lim->dpl_w);
+
+    d[0] = drive & 0xFF;
+    d[1] = drive >> 8 & 0xFF;
+    d[2] = regen & 0xFF;
+    d[3] = regen >> 8 & 0xFF;
+    d[4] = dpl & 0xFF;
+    d[5] = dpl >> 8 & 0xFF;
+    d[6] = (uint8_t)((lim->live ? CONTROL_LIMITS_LIVE : 0) | (lim->limp ? CONTROL_LIMITS_LIMP : 0) |
+                     ((lim->why & BMS_LIMITS_WHY_STALE) ? CONTROL_LIMITS_STALE : 0) |
+                     ((lim->why & BMS_LIMITS_WHY_VERSION) ? CONTROL_LIMITS_VERSION : 0) |
+                     ((lim->why & BMS_LIMITS_WHY_COUNTER) ? CONTROL_LIMITS_COUNTER : 0));
+    d[7] = 0x00;
 }

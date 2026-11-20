@@ -23,22 +23,18 @@ Core/Inc/can_tx.h
 Core/Inc/rtd.h
 Core/Inc/launch_control.h
 Core/Inc/regen.h
-Core/Inc/soc_kf.h
-Core/Inc/soc_kf_tables.h
 Core/Src/adc.c
 Core/Src/bms_limits.c
 Core/Src/can_tx.c
 Core/Src/rtd.c
 Core/Src/launch_control.c
 Core/Src/regen.c
-Core/Src/soc_kf.c
 tools/adc_test.c
 tools/bms_limits_test.c
 tools/can_tx_test.c
 tools/lc_test.c
 tools/regen_test.c
 tools/rtd_test.c
-tools/soc_kf_test.c
 "
 
 if command -v clang-format >/dev/null 2>&1; then
