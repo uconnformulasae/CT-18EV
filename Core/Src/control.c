@@ -81,8 +81,9 @@ int32_t control_torque_limit(float x, uint32_t rpm, uint32_t dpl_w)
 
     float limit = fminf((float)TORQUE_LIMIT_NM_X10, power_limit);
 
+    /* The high-speed cap lowers the limit, never raises it past the DPL */
     if (rpm >= TORQUE_HIGH_SPEED_RPM) {
-        limit = TORQUE_HIGH_SPEED_NM_X10;
+        limit = fminf(TORQUE_HIGH_SPEED_NM_X10, limit);
     }
 
     return (int32_t)(x * limit);

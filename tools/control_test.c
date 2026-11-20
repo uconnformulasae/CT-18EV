@@ -349,7 +349,7 @@ static void test_power_limit(void)
     int bad = 0;
     const uint32_t dpls[] = {0, 1000, 20000, 52500, 77000, 80000, 6553500};
     for (size_t k = 0; k < sizeof(dpls) / sizeof(dpls[0]); k++) {
-        for (uint32_t rpm = 0; rpm < TORQUE_HIGH_SPEED_RPM; rpm += 25) {
+        for (uint32_t rpm = 0; rpm <= 9000; rpm += 25) {
             const float shaft_w =
                 (float)control_torque_limit(1.0f, rpm, dpls[k]) / 10.0f * (float)rpm * RPM_TO_RAD_S;
             bad += shaft_w > (float)dpls[k] * DRIVE_EFFICIENCY + 0.5f;
@@ -357,13 +357,17 @@ static void test_power_limit(void)
     }
     check_eq(bad, 0, "shaft power within DPL * efficiency");
 
-    /* Known issue, fixed separately: the fixed 30 Nm ignores the DPL */
+    /* From 6000 rpm: the smaller of 30 Nm and the power limit */
     check_eq(control_torque_limit(1.0f, TORQUE_HIGH_SPEED_RPM, 77000),
-             (long)TORQUE_HIGH_SPEED_NM_X10, "30 Nm from 6000 rpm");
-    check_eq(control_torque_limit(1.0f, TORQUE_HIGH_SPEED_RPM, 0), (long)TORQUE_HIGH_SPEED_NM_X10,
-             "from 6000 rpm ignores DPL (known issue)");
+             (long)TORQUE_HIGH_SPEED_NM_X10, "77 kW at 6000 rpm: 30 Nm, under the power limit");
+    check_eq(control_torque_limit(1.0f, TORQUE_HIGH_SPEED_RPM, 10000), 146,
+             "10 kW at 6000 rpm: the power limit, under 30 Nm");
+    check_eq(control_torque_limit(1.0f, TORQUE_HIGH_SPEED_RPM, 0), 0, "0 kW at 6000 rpm: 0");
     check_eq(control_torque_limit(1.0f, 9000, CAR_LIMITS_LIMP_DPL_W),
-             (long)TORQUE_HIGH_SPEED_NM_X10, "and limp");
+             (long)TORQUE_HIGH_SPEED_NM_X10, "limp at 9000 rpm: 30 Nm");
+    check_eq(control_torque_limit(1.0f, 9000, 10000), 97, "10 kW at 9000 rpm: the power limit");
+    check_eq(control_torque_limit(1.0f, TORQUE_HIGH_SPEED_RPM - 1, 10000), 146,
+             "no step at 6000 rpm when power-limited");
 }
 
 /* ---- CAN frames ---- */
