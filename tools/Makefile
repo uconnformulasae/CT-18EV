@@ -11,14 +11,18 @@ CC      ?= cc
 CFLAGS  ?= -O1 -g -Wall -Wextra -I../Core/Inc
 LDLIBS   = -lm
 
-TESTS = lc_test can_tx_test rtd_test adc_test regen_test regen_off_test \
-        control_test version_test bms_limits_test
+TESTS = can_tx_test rtd_test adc_test regen_test regen_off_test \
+        control_test version_test bms_limits_test lc_test
 
 .PHONY: all test coverage clean
 all: test
 
-test: $(TESTS)
+# Each test is built just before it runs, so a test that does not build stops
+# the run there, after the ones before it have run. lc_test is last: it does
+# not build on the host yet (launch_control.c reaches the HAL through main.h).
+test:
 	@for t in $(TESTS); do \
+		$(MAKE) --no-print-directory $$t || exit 1; \
 		echo "== $$t"; \
 		./$$t || exit 1; \
 	done
