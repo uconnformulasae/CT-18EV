@@ -102,6 +102,9 @@
 /* Tunes live in soc_derate_tunes.h */
 #define SOC_DERATE_CELL_STALE_MS 500u
 
+/* The BMS's 0x203 limits older than this are stale: limp */
+#define BMS_LIMITS_STALE_MS 100u
+
 /* Weak cell SoC gap filter time constant (s) */
 #define SOC_DERATE_GAP_TAU_S 60.0f
 
