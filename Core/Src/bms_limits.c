@@ -70,7 +70,10 @@ void bms_limits_get(uint32_t tick, bms_limits_t *out)
 {
     const uint32_t pm = crit_enter();
     const car_limits_t l = s.lim;
-    const uint32_t age = tick - s.tick; /* unsigned: survives the tick wrap */
+    /* Signed difference survives the tick wrap. A frame stamped after the caller
+       sampled its tick (the RX ISR ran in between) is age 0, not 2^32 - 1. */
+    const int32_t diff = (int32_t)(tick - s.tick);
+    const uint32_t age = (diff < 0) ? 0u : (uint32_t)diff;
     const uint8_t have = s.have;
     const uint8_t why = s.why;
     crit_exit(pm);

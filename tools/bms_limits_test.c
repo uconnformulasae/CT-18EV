@@ -167,6 +167,17 @@ static void test_tick_wraps(void)
     check_eq((long)o.dpl_w, 77000, "dpl");
 }
 
+static void test_frame_stamped_after_the_callers_tick_is_live(void)
+{
+    printf("test_frame_stamped_after_the_callers_tick_is_live\n");
+    bms_limits_init();
+    frame(7u, 0u, 1u, 1001u);
+    bms_limits_t o = get(1000u);
+    check_eq(o.live, 1, "live");
+    check_eq((long)o.dpl_w, 77000, "dpl as fed");
+    check_eq(o.why, 0, "no why");
+}
+
 static void test_limp_flag_in_a_fresh_frame(void)
 {
     printf("test_limp_flag_in_a_fresh_frame\n");
@@ -188,6 +199,7 @@ int main(void)
     test_repeated_counter_does_not_refresh();
     test_counter_wraps();
     test_tick_wraps();
+    test_frame_stamped_after_the_callers_tick_is_live();
     test_limp_flag_in_a_fresh_frame();
 
     printf("%d checks, %d failed\n", checks, failures);
