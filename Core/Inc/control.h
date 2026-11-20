@@ -3,7 +3,15 @@
 
 #include <stdint.h>
 
+#include "bms_limits.h"
 #include "config.h"
+
+/* 0x55A byte 6 */
+#define CONTROL_LIMITS_LIVE    0x01 /* fresh, valid 0x203 */
+#define CONTROL_LIMITS_LIMP    0x02 /* using limp values */
+#define CONTROL_LIMITS_STALE   0x04 /* BMS_LIMITS_WHY_STALE */
+#define CONTROL_LIMITS_VERSION 0x08 /* BMS_LIMITS_WHY_VERSION */
+#define CONTROL_LIMITS_COUNTER 0x10 /* BMS_LIMITS_WHY_COUNTER */
 
 typedef struct {
     float tps1_avg;
@@ -55,8 +63,8 @@ uint8_t control_fault_debounce(control_t *c, uint8_t fault, uint32_t dt_ms);
 /* TPS to 0..1 across the drive range */
 float control_torque_map(float tps);
 
-/* Torque request (0.1 Nm) for a mapped pedal, capped by DC current limit */
-int32_t control_torque_limit(float x, uint32_t rpm, uint32_t dcl_a);
+/* Torque request (0.1 Nm) for a mapped pedal, capped by the BMS's discharge power limit (W) */
+int32_t control_torque_limit(float x, uint32_t rpm, uint32_t dpl_w);
 
 void control_pack_inverter(uint8_t *d, int32_t torque, uint8_t lockout, uint8_t disable,
                            uint8_t heartbeat);
@@ -64,5 +72,9 @@ void control_pack_debug(uint8_t *d, const control_status_t *s);
 
 /* 0x55C: psi x10 [0:1], raw ADC [2:3], little endian; bit 0 pressed, bit 1 oor [4] */
 void control_pack_bps(uint8_t *d, float psi, uint16_t adc, uint8_t pressed, uint8_t oor);
+
+/* 0x55A LVCU_Limits: drive torque limit [0:1] and regen torque limit (magnitude) [2:3],
+   0.1 Nm; DPL in use, 0.1 kW [4:5]; little endian, saturating; CONTROL_LIMITS_* [6] */
+void control_pack_limits(uint8_t *d, int32_t drive_x10, int32_t regen_x10, const bms_limits_t *lim);
 
 #endif /* CONTROL_H */

@@ -3,13 +3,12 @@
 
 #include <stdint.h>
 
+#include "bms_limits.h"
 #include "config.h"
-#include "soc_kf.h"
 
+/* 0x559: cut [0], CPL in use, kW, saturating [1], max regen, Nm [2] */
 #define REGEN_DEBUG_CAN_ID 0x559
 #define REGEN_DEBUG_DLC    3
-
-#define REGEN_CELL_CHARGE_A 25.0f
 
 #define REGEN_CUTOFF_RPM 500u
 #define REGEN_RAMP_RPM   650u
@@ -17,10 +16,6 @@
 
 /* Regen torque at REGEN_RPM_MAX (Nm) */
 #define REGEN_PEAK_NM 100.0f
-
-/* Regen fades in from zero at SOC_OFF to full strength at SOC_FULL */
-#define REGEN_SOC_OFF  0.95f
-#define REGEN_SOC_FULL 0.80f
 
 /* Slew below BAND (0.1 Nm), rates in 0.1 Nm/ms */
 #define REGEN_SLEW_BAND 100
@@ -31,18 +26,19 @@
 typedef struct {
     float pedal;
     float max_nm;
-    float soc_scale;
+    uint32_t cpl_w; /* charge power limit in use (W), 0 when the limits are not live */
     int32_t target;
     int32_t torque;
     uint8_t cut;
-    uint8_t soc_ok;
+    uint8_t limits_live;
 } regen_debug_t;
 
 void regen_init(void);
 
-/* Returns commanded torque (0.1 Nm) */
+/* Returns commanded torque (0.1 Nm). Regen torque is capped at lim->cpl_w over the
+   motor speed (efficiency 1), and is 0 when the limits are not live. */
 int32_t regen_update(int32_t drive_torque, uint32_t motor_speed_rpm, float tps,
-                     const soc_kf_debug_t *kf, uint8_t cut, uint32_t dt_ms);
+                     const bms_limits_t *lim, uint8_t cut, uint32_t dt_ms);
 
 const regen_debug_t *regen_get_debug(void);
 void regen_pack_debug(uint8_t *d);
