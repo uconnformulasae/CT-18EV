@@ -57,8 +57,13 @@ static uint8_t mailbox_send(const can_tx_frame_t *f)
 #endif
 
 can_tx_queue_t can_tx_mk_queue() {
-	can_tx_queue_t queue;
-	can_tx_init(&queue);
+	can_tx_queue_t queue = {
+			.q_head = 0u,
+			.q_tail = 0u,
+			.q_count = 0u,
+			.q_dropped = 0u
+	};
+
 	return queue;
 }
 

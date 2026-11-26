@@ -23,10 +23,10 @@ typedef struct can_tx_queue {
 } can_tx_queue_t;
 
 typedef struct can_tx_host {
-	uint32_t can_tx_host_free_mailboxes = 3u;
-	uint8_t can_tx_host_refuse = 0u; /* AddTxMessage failing with a mailbox free */
+	uint32_t can_tx_host_free_mailboxes;
+	uint8_t can_tx_host_refuse;
 	can_tx_frame_t can_tx_host_sent[64];
-	uint32_t can_tx_host_sent_count = 0u;
+	uint32_t can_tx_host_sent_count;
 } can_tx_host_t;
 
 can_tx_queue_t* can_tx_mk_queue();
