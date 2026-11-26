@@ -2,29 +2,45 @@
 
 #include "can_tx.h"
 
+typedef struct can_tx_frame {
+    uint16_t std_id;
+    uint8_t dlc;
+    uint8_t data[8];
+} can_tx_frame_t;
+
+typedef struct can_tx_queue {
+	can_tx_frame_t queue[CAN_TX_QUEUE_LEN];
+	uint8_t q_head;
+	uint8_t q_tail;
+	uint8_t q_count;
+	uint16_t q_dropped;
+} can_tx_queue_t;
+
 
 #ifdef CAN_TX_HOST
 
-uint32_t can_tx_host_free_mailboxes = 3u;
-uint8_t can_tx_host_refuse = 0u; /* AddTxMessage failing with a mailbox free */
-can_tx_frame_t can_tx_host_sent[64];
-uint32_t can_tx_host_sent_count = 0u;
+typedef struct can_tx_host {
+	uint32_t can_tx_host_free_mailboxes;
+	uint8_t can_tx_host_refuse;
+	can_tx_frame_t can_tx_host_sent[64];
+	uint32_t can_tx_host_sent_count;
+} can_tx_host_t;
 
-static uint32_t mailboxes_free(void)
+static uint32_t mailboxes_free(const can_tx_host* self)
 {
-    return can_tx_host_free_mailboxes;
+    return self->can_tx_host_free_mailboxes;
 }
 
 /* Only called once mailboxes_free() says there's room */
-static uint8_t mailbox_send(const can_tx_frame_t *f)
+static uint8_t mailbox_send(can_tx_host* self, const can_tx_frame_t *f)
 {
-    if (can_tx_host_refuse) {
+    if (self->can_tx_host_refuse) {
         return 0u;
     }
-    if (can_tx_host_sent_count < 64u) {
-        can_tx_host_sent[can_tx_host_sent_count++] = *f;
+    if (self->can_tx_host_sent_count < 64u) {
+        self->can_tx_host_sent[self->can_tx_host_sent_count++] = *f;
     }
-    can_tx_host_free_mailboxes--;
+    self->can_tx_host_free_mailboxes--;
     return 1u;
 }
 

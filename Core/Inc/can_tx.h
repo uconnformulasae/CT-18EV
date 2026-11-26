@@ -6,28 +6,11 @@
 #define CAN_TX_QUEUE_LEN 16
 
 #ifdef CAN_TX_HOST
+typedef struct can_tx_host can_tx_host_t;
 #endif
 
-typedef struct can_tx_frame {
-    uint16_t std_id;
-    uint8_t dlc;
-    uint8_t data[8];
-} can_tx_frame_t;
-
-typedef struct can_tx_queue {
-	can_tx_frame_t queue[CAN_TX_QUEUE_LEN];
-	uint8_t q_head;
-	uint8_t q_tail;
-	uint8_t q_count;
-	uint16_t q_dropped;
-} can_tx_queue_t;
-
-typedef struct can_tx_host {
-	uint32_t can_tx_host_free_mailboxes;
-	uint8_t can_tx_host_refuse;
-	can_tx_frame_t can_tx_host_sent[64];
-	uint32_t can_tx_host_sent_count;
-} can_tx_host_t;
+typedef struct can_tx_frame can_tx_frame_t;
+typedef struct can_tx_queue can_tx_queue_t;
 
 void can_tx_init(can_tx_queue_t* self);
 
