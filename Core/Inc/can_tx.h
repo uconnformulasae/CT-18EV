@@ -8,6 +8,12 @@
 #ifdef CAN_TX_HOST
 #endif
 
+typedef struct can_tx_frame {
+    uint16_t std_id;
+    uint8_t dlc;
+    uint8_t data[8];
+} can_tx_frame_t;
+
 typedef struct can_tx_queue {
 	can_tx_frame_t queue[CAN_TX_QUEUE_LEN];
 	uint8_t q_head;

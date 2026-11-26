@@ -276,7 +276,7 @@ int main(void)
 	lc_init();
 	adc_init();
 	rtd_init();
-	can_tx_init();
+	can_tx_init(&can1_queue);
 #if REGEN_ENABLE
 	regen_init();
 #endif
@@ -310,7 +310,7 @@ int main(void)
 	uint32_t bps_tick = last_loop_tick;
 
 	while (1) {
-		can_tx_pump();
+		can_tx_pump(&can1_queue);
 
 		if (!control_ready) {
 			continue;
@@ -402,20 +402,20 @@ int main(void)
 
 		control_pack_inverter(TxData, torque_request, inverter_lockout,
 				should_disable_inverter, heartbeat_counter);
-		can_tx_send(CAN_ID_TX_INVERTER_CMD, TxData, 8);
+		can_tx_send(&can1_queue, CAN_ID_TX_INVERTER_CMD, TxData, 8);
 		heartbeat_counter += 1;
 		heartbeat_counter = heartbeat_counter & CAN_HEARTBEAT_MASK;
 
 		if (loop_tick - version_tick >= VERSION_TX_MS) {
 			version_pack(TxData);
-			can_tx_send(VERSION_CAN_ID, TxData, VERSION_DLC);
+			can_tx_send(&can1_queue, VERSION_CAN_ID, TxData, VERSION_DLC);
 			version_tick = loop_tick;
 		}
 
 		if (loop_tick - bps_tick >= BPS_TX_MS) {
 			control_pack_bps(TxData, control_bps_psi(bps), (uint16_t) bps_adc,
 					brake_pressed, bps_oor);
-			can_tx_send(CAN_ID_TX_BPS, TxData, CAN_BPS_DLC);
+			can_tx_send(&can1_queue, CAN_ID_TX_BPS, TxData, CAN_BPS_DLC);
 			bps_tick = loop_tick;
 		}
 
@@ -433,27 +433,27 @@ int main(void)
 				.inverter_lockout = inverter_lockout,
 			};
 			control_pack_debug(TxData, &status);
-			can_tx_send(CAN_ID_TX_DEBUG, TxData, 8);
+			can_tx_send(&can1_queue, CAN_ID_TX_DEBUG, TxData, 8);
 
 			TxData[0] = (ready_to_drive) & 0x01;
 			TxData[1] = reset_cause;
 
-			can_tx_send(CAN_ID_TX_RTD, TxData, 2);
+			can_tx_send(&can1_queue, CAN_ID_TX_RTD, TxData, 2);
 
 			for (uint32_t i = 0; i < 7; i++) {
 				TxData[i] = 0;
 			}
 			TxData[7] = (uint8_t) CAP(loop_dt_max_ms, 255u);
-			can_tx_send(CAN_ID_TX_LOOP, TxData, 8);
+			can_tx_send(&can1_queue, CAN_ID_TX_LOOP, TxData, 8);
 
 			control_pack_limits(TxData,
 					control_torque_limit(1.0f, motor_speed, lim.dpl_w),
 					(int32_t) (10.0f * regen_get_debug()->max_nm), &lim);
-			can_tx_send(CAN_ID_TX_LIMITS, TxData, 8);
+			can_tx_send(&can1_queue, CAN_ID_TX_LIMITS, TxData, 8);
 
 #if REGEN_ENABLE
 			regen_pack_debug(TxData);
-			can_tx_send(REGEN_DEBUG_CAN_ID, TxData, REGEN_DEBUG_DLC);
+			can_tx_send(&can1_queue, REGEN_DEBUG_CAN_ID, TxData, REGEN_DEBUG_DLC);
 #endif
 
 			print_ready = 0;

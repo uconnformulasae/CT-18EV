@@ -2,11 +2,6 @@
 
 #include "can_tx.h"
 
-typedef struct {
-    uint16_t std_id;
-    uint8_t dlc;
-    uint8_t data[8];
-} can_tx_frame_t;
 
 #ifdef CAN_TX_HOST
 
@@ -61,7 +56,7 @@ static uint8_t mailbox_send(const can_tx_frame_t *f)
 
 #endif
 
-can_tx_queue_t* can_tx_mk_queue() {
+can_tx_queue_t can_tx_mk_queue() {
 	can_tx_queue_t queue;
 	can_tx_init(&queue);
 	return queue;
@@ -99,7 +94,7 @@ uint8_t can_tx_send(can_tx_queue_t* self, uint16_t std_id, const uint8_t *data, 
 void can_tx_pump(can_tx_queue_t* self)
 {
     while (self->q_count > 0u && mailboxes_free() > 0u) {
-        if (!mailbox_send(&self->queue[q_tail])) {
+        if (!mailbox_send(&self->queue[self->q_tail])) {
             break; /* mailbox busy */
         }
 
