@@ -29,7 +29,7 @@ typedef struct can_tx_host {
 	uint32_t can_tx_host_sent_count;
 } can_tx_host_t;
 
-#endif;
+#endif
 
 void can_tx_init(can_tx_queue_t* self);
 
