@@ -29,7 +29,7 @@ typedef struct can_tx_host {
 	uint32_t can_tx_host_sent_count;
 } can_tx_host_t;
 
-can_tx_queue_t* can_tx_mk_queue();
+can_tx_queue_t can_tx_mk_queue();
 void can_tx_init(can_tx_queue_t* self);
 
 /* Queue standard CAN frame. Returns 0 if dropped. */
