@@ -111,7 +111,7 @@ static uint8_t lc_was_enabled = 0;
 static control_t ctrl;
 static uint8_t reset_cause = 0;
 
-can_tx_queue_t can1_queue = can_tx_mk_queue();
+can_tx_queue_t can1_queue;
 
 static uint8_t read_reset_cause(void) {
 	uint8_t cause = 0;
