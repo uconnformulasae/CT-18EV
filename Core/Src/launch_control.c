@@ -1,4 +1,4 @@
-#include "assists/launch_control.h"
+#include "launch_control.h"
 #include "main.h"
 #include <math.h>
 
@@ -124,8 +124,6 @@ void lc_init(void)
     dbg.sensor_healthy = 0;
     dbg.slip_rate_cut = 0;
     dbg.dt_s = LC_DT_S;
-    dbg.accel_x = 0;
-    dbg.ground_velocity_estimate = 0;
     prev_slip_ratio = 0.0f;
     was_launching = 0;
     exit_latched = 0;

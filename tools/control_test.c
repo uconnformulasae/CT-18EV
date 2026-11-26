@@ -65,20 +65,6 @@ static float old_tmap_lut(float tps)
            (1.0f / (TMAP_DEADBAND_HIGH - TMAP_DRIVE_START));
 }
 
-static int32_t old_torque_lut(float tps, uint32_t motor_speed, uint32_t current_limit)
-{
-    const float power_limit = (float)(TORQUE_POWER_NUM * current_limit) /
-                              fmaxf(TORQUE_SPEED_DIV_MIN, (float)motor_speed * TORQUE_RPM_TO_DIV);
-
-    float torque_limit_local = fminf((float)TORQUE_LIMIT_NM_X10, power_limit);
-
-    if (motor_speed >= TORQUE_HIGH_SPEED_RPM) {
-        torque_limit_local = TORQUE_HIGH_SPEED_NM_X10;
-    }
-
-    return (int32_t)(tps * torque_limit_local);
-}
-
 /* Old debounce: loop sets the flag, TIM2 ISR counts it between loop passes */
 typedef struct {
     uint8_t start;
@@ -136,18 +122,6 @@ static void test_matches_old(void)
         bad += control_torque_map(tps) != old_tmap_lut(tps);
     }
     check_eq(bad, 0, "torque map identical");
-
-    bad = 0;
-    const uint32_t dcls[] = {0, 1, 60, 100, 121, 125, 165, 200, 400};
-    for (uint32_t rpm = 0; rpm <= 7000; rpm += 50) {
-        for (size_t k = 0; k < sizeof(dcls) / sizeof(dcls[0]); k++) {
-            for (int i = 0; i <= 20; i++) {
-                const float x = (float)i * 0.05f;
-                bad += control_torque_limit(x, rpm, dcls[k]) != old_torque_lut(x, rpm, dcls[k]);
-            }
-        }
-    }
-    check_eq(bad, 0, "torque limit identical");
 
     /* Same fault pattern through both debounces */
     bad = 0;
@@ -345,26 +319,55 @@ static void test_torque_map(void)
 static void test_torque_limit(void)
 {
     printf("test_torque_limit\n");
-    check_eq(control_torque_limit(1.0f, 0, 400), TORQUE_LIMIT_NM_X10, "capped at max torque");
-    check_eq(control_torque_limit(0.0f, 0, 400), 0, "no pedal no torque");
-    check_eq(control_torque_limit(0.5f, 0, 400), TORQUE_LIMIT_NM_X10 / 2, "scales with pedal");
+    check_eq(control_torque_limit(1.0f, 0, 77000), TORQUE_LIMIT_NM_X10, "capped at max torque");
+    check_eq(control_torque_limit(0.0f, 0, 77000), 0, "no pedal no torque");
+    check_eq(control_torque_limit(0.5f, 0, 77000), TORQUE_LIMIT_NM_X10 / 2, "scales with pedal");
+    check_eq(control_torque_limit(1.0f, 3000, 0), 0, "0 kW gives 0 torque");
 
-    /* 4200 * DCL / max(230.4, rpm * 0.1076) */
-    check_eq(control_torque_limit(1.0f, 0, 100), 1822, "100 A at standstill");
-    check_eq(control_torque_limit(1.0f, 4000, 165), 1610, "165 A at 4000 rpm");
-    check_eq(control_torque_limit(1.0f, 5000, 60), 468, "60 A at 5000 rpm");
-    check_eq(control_torque_limit(1.0f, 3000, 0), 0, "0 A gives 0 torque");
-
-    check(control_torque_limit(1.0f, 4000, 100) < control_torque_limit(1.0f, 4000, 150),
-          "less current, less torque");
-    check(control_torque_limit(1.0f, 5000, 150) < control_torque_limit(1.0f, 3000, 150),
+    check(control_torque_limit(1.0f, 4000, 40000) < control_torque_limit(1.0f, 4000, 60000),
+          "less power, less torque");
+    check(control_torque_limit(1.0f, 5000, 60000) < control_torque_limit(1.0f, 3000, 60000),
           "more speed, less torque");
+}
 
-    /* Known issue, fixed separately: the fixed 30 Nm ignores the DCL */
-    check_eq(control_torque_limit(1.0f, 6000, 165), (long)TORQUE_HIGH_SPEED_NM_X10,
-             "30 Nm above 6000 rpm");
-    check_eq(control_torque_limit(1.0f, 6000, 0), (long)TORQUE_HIGH_SPEED_NM_X10,
-             "above 6000 rpm ignores DCL (known issue)");
+/* 10 * DPL * 0.92 / max(224.24 rad/s, rpm * 2 pi / 60), capped at 220 Nm */
+static void test_power_limit(void)
+{
+    printf("test_power_limit\n");
+    check_eq(control_torque_limit(1.0f, 5000, 77000), 1352, "77 kW at 5000 rpm");
+    check_eq(control_torque_limit(1.0f, 1000, 77000), TORQUE_LIMIT_NM_X10,
+             "77 kW at 1000 rpm: the floor, then the cap");
+    check_eq(control_torque_limit(1.0f, 5000, 52500), 922, "limp 52.5 kW at 5000 rpm");
+    check_eq(control_torque_limit(0.5f, 5000, 77000), 676, "half pedal at 77 kW, 5000 rpm");
+
+    /* Below the floor (2141 rpm) the limit stops rising */
+    check_eq(control_torque_limit(1.0f, 0, 20000), 820, "20 kW at standstill");
+    check_eq(control_torque_limit(1.0f, 2000, 20000), 820, "same at 2000 rpm, under the floor");
+    check(control_torque_limit(1.0f, 2500, 20000) < 820, "falls above the floor");
+
+    /* Shaft power at the limit never exceeds DPL * DRIVE_EFFICIENCY */
+    int bad = 0;
+    const uint32_t dpls[] = {0, 1000, 20000, 52500, 77000, 80000, 6553500};
+    for (size_t k = 0; k < sizeof(dpls) / sizeof(dpls[0]); k++) {
+        for (uint32_t rpm = 0; rpm <= 9000; rpm += 25) {
+            const float shaft_w =
+                (float)control_torque_limit(1.0f, rpm, dpls[k]) / 10.0f * (float)rpm * RPM_TO_RAD_S;
+            bad += shaft_w > (float)dpls[k] * DRIVE_EFFICIENCY + 0.5f;
+        }
+    }
+    check_eq(bad, 0, "shaft power within DPL * efficiency");
+
+    /* From 6000 rpm: the smaller of 30 Nm and the power limit */
+    check_eq(control_torque_limit(1.0f, TORQUE_HIGH_SPEED_RPM, 77000),
+             (long)TORQUE_HIGH_SPEED_NM_X10, "77 kW at 6000 rpm: 30 Nm, under the power limit");
+    check_eq(control_torque_limit(1.0f, TORQUE_HIGH_SPEED_RPM, 10000), 146,
+             "10 kW at 6000 rpm: the power limit, under 30 Nm");
+    check_eq(control_torque_limit(1.0f, TORQUE_HIGH_SPEED_RPM, 0), 0, "0 kW at 6000 rpm: 0");
+    check_eq(control_torque_limit(1.0f, 9000, CAR_LIMITS_LIMP_DPL_W),
+             (long)TORQUE_HIGH_SPEED_NM_X10, "limp at 9000 rpm: 30 Nm");
+    check_eq(control_torque_limit(1.0f, 9000, 10000), 97, "10 kW at 9000 rpm: the power limit");
+    check_eq(control_torque_limit(1.0f, TORQUE_HIGH_SPEED_RPM - 1, 10000), 146,
+             "no step at 6000 rpm when power-limited");
 }
 
 /* ---- CAN frames ---- */
@@ -459,6 +462,46 @@ static void test_pack_bps(void)
     check_eq(d[4], 0x02, "oor bit");
 }
 
+/* 0x55A LVCU_Limits. Literal bit values pin the layout the AiM decodes */
+static void test_pack_limits(void)
+{
+    printf("test_pack_limits\n");
+    uint8_t d[8];
+    bms_limits_t l = {.dpl_w = 77049u, .cpl_w = 20000u, .live = 1u, .limp = 0u, .why = 0u};
+
+    memset(d, 0xAA, sizeof(d));
+    control_pack_limits(d, 1352, 636, &l);
+    check_eq(d[0] | d[1] << 8, 1352, "drive torque limit 0.1 Nm, little endian");
+    check_eq(d[2] | d[3] << 8, 636, "regen torque limit 0.1 Nm");
+    check_eq(d[4] | d[5] << 8, 770, "dpl 0.1 kW, rounded down");
+    check_eq(d[6], 0x01, "live only");
+    check_eq(d[7], 0, "reserved");
+
+    l = (bms_limits_t){
+        .dpl_w = CAR_LIMITS_LIMP_DPL_W, .live = 0u, .limp = 1u, .why = BMS_LIMITS_WHY_STALE};
+    control_pack_limits(d, 922, 0, &l);
+    check_eq(d[4] | d[5] << 8, 525, "limp dpl");
+    check_eq(d[6], 0x06, "limp, stale");
+
+    l.why = BMS_LIMITS_WHY_STALE | BMS_LIMITS_WHY_VERSION;
+    control_pack_limits(d, 922, 0, &l);
+    check_eq(d[6], 0x0E, "limp, stale, bad version");
+
+    l.why = BMS_LIMITS_WHY_STALE | BMS_LIMITS_WHY_COUNTER;
+    control_pack_limits(d, 922, 0, &l);
+    check_eq(d[6], 0x16, "limp, stale, stuck counter");
+
+    l = (bms_limits_t){.dpl_w = CAR_LIMITS_LIMP_DPL_W, .live = 1u, .limp = 1u, .why = 0u};
+    control_pack_limits(d, 922, 0, &l);
+    check_eq(d[6], 0x03, "live, the BMS says limp");
+
+    l = (bms_limits_t){.dpl_w = UINT32_MAX, .live = 1u};
+    control_pack_limits(d, -5, 70000, &l);
+    check_eq(d[0] | d[1] << 8, 0, "negative drive limit packs 0");
+    check_eq(d[2] | d[3] << 8, 0xFFFF, "regen limit saturates");
+    check_eq(d[4] | d[5] << 8, 0xFFFF, "dpl saturates");
+}
+
 int main(void)
 {
     test_matches_old();
@@ -469,9 +512,11 @@ int main(void)
     test_debounce();
     test_torque_map();
     test_torque_limit();
+    test_power_limit();
     test_pack_inverter();
     test_pack_debug();
     test_pack_bps();
+    test_pack_limits();
 
     printf("\n%d checks, %d failures\n", checks, failures);
     return failures != 0;

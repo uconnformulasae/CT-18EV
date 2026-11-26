@@ -61,56 +61,59 @@ static uint8_t mailbox_send(const can_tx_frame_t *f)
 
 #endif
 
-static can_tx_frame_t queue[CAN_TX_QUEUE_LEN];
-static uint8_t q_head;
-static uint8_t q_tail;
-static uint8_t q_count;
-static uint16_t q_dropped;
-
-void can_tx_init(void)
-{
-    q_head = 0u;
-    q_tail = 0u;
-    q_count = 0u;
-    q_dropped = 0u;
+can_tx_queue_t* can_tx_mk_queue() {
+	can_tx_queue_t queue;
+	can_tx_init(&queue);
+	return queue;
 }
 
-uint8_t can_tx_send(uint16_t std_id, const uint8_t *data, uint8_t dlc)
+void can_tx_init(can_tx_queue_t* self)
 {
-    if (q_count >= CAN_TX_QUEUE_LEN) {
-        q_dropped++;
+    self->q_head = 0u;
+    self->q_tail = 0u;
+    self->q_count = 0u;
+    self->q_dropped = 0u;
+}
+
+uint8_t can_tx_send(can_tx_queue_t* self, uint16_t std_id, const uint8_t *data, uint8_t dlc)
+{
+    if (self->q_count >= CAN_TX_QUEUE_LEN) {
+        self->q_dropped++;
         return 0u;
     }
 
-    can_tx_frame_t *f = &queue[q_head];
+    can_tx_frame_t* f = &self->queue[self->q_head];
+
     f->std_id = std_id;
     f->dlc = (dlc > 8u) ? 8u : dlc;
+
     for (uint8_t i = 0u; i < 8u; i++) {
         f->data[i] = (i < f->dlc) ? data[i] : 0u;
     }
 
-    q_head = (uint8_t)((q_head + 1u) % CAN_TX_QUEUE_LEN);
-    q_count++;
+    self->q_head = (uint8_t)((self->q_head + 1u) % CAN_TX_QUEUE_LEN);
+    self->q_count++;
     return 1u;
 }
 
-void can_tx_pump(void)
+void can_tx_pump(can_tx_queue_t* self)
 {
-    while (q_count > 0u && mailboxes_free() > 0u) {
-        if (!mailbox_send(&queue[q_tail])) {
+    while (self->q_count > 0u && mailboxes_free() > 0u) {
+        if (!mailbox_send(&self->queue[q_tail])) {
             break; /* mailbox busy */
         }
-        q_tail = (uint8_t)((q_tail + 1u) % CAN_TX_QUEUE_LEN);
-        q_count--;
+
+        self->q_tail = (uint8_t)((self->q_tail + 1u) % CAN_TX_QUEUE_LEN);
+        self->q_count--;
     }
 }
 
-uint16_t can_tx_dropped(void)
+uint16_t can_tx_dropped(const can_tx_queue_t* self)
 {
-    return q_dropped;
+    return self->q_dropped;
 }
 
-uint8_t can_tx_depth(void)
+uint8_t can_tx_depth(const can_tx_queue_t* self)
 {
-    return q_count;
+    return self->q_count;
 }

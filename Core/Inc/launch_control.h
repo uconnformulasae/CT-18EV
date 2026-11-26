@@ -74,6 +74,9 @@
 #define LC_DRIVELINE_RAMP_RATE_NMPS 600
 #define LC_TRACTION_RAMP_RATE_NMPS 300
 
+
+
+
 typedef enum {
     LC_STATE_ARMED,
     LC_STATE_LAUNCHING_OPENLOOP,
@@ -98,8 +101,6 @@ typedef struct {
     float rear_wheel_speed; /* Motor wheel speed (m/s) */
     uint8_t sensor_healthy; /* Wheel speed CAN active */
     uint8_t slip_rate_cut;  /* Slip rate cut active */
-    uint16_t accel_x;
-    float ground_velocity_estimate;
 } lc_debug_t;
 
 void lc_init(void);

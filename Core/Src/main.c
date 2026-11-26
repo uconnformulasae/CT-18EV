@@ -28,16 +28,11 @@
 #include "adc.h"
 #include "can_tx.h"
 #include "rtd.h"
-#include "assists/launch_control.h"
+#include "launch_control.h"
 #include "regen.h"
-#include "soc_kf.h"
-#include "soc_derate.h"
+#include "bms_limits.h"
 #include "control.h"
 #include "version.h"
-
-#include "sensors/aim_accelerometer.h"
-#include "sensors/resolver_feedback.h"
-#include "sensors/speed_encoder.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -98,8 +93,6 @@ uint8_t RxData[8];
 
 volatile uint32_t motor_speed = 0;
 volatile uint32_t motor_speed_tick = 0;
-volatile uint32_t current_limit = CURRENT_LIMIT_DEFAULT_A;
-volatile uint32_t bms_dcl = CURRENT_LIMIT_DEFAULT_A;
 volatile uint8_t inverter_enabled = 0;
 volatile uint8_t inverter_lockout = 1;
 volatile uint8_t control_ready = 0;
@@ -108,7 +101,6 @@ volatile uint8_t ready_to_drive = 0;
 volatile uint16_t rtd_timeout = RTD_TIMEOUT_INIT;
 volatile uint8_t rtd_buzzer_counter = 0;
 
-volatile uint32_t bus_voltage = BUS_VOLTAGE_DEFAULT_V;
 volatile uint8_t inv_message = 0;
 volatile uint16_t ext_frame_count = 0;
 
@@ -119,11 +111,7 @@ static uint8_t lc_was_enabled = 0;
 static control_t ctrl;
 static uint8_t reset_cause = 0;
 
-/* Sensors */
-aim_accelerometer_t aim_accelerometer;
-resolver_feedback_t resolver_feedback;
-speed_encoder_t encoder_left;
-speed_encoder_t encoder_right;
+can_tx_queue_t can1_queue = can_tx_mk_queue();
 
 static uint8_t read_reset_cause(void) {
 	uint8_t cause = 0;
@@ -165,30 +153,13 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
 	} else if (RxHeader.StdId == CAN_ID_RX_MOTOR_SPEED) {
 		int16_t motor_speed_raw = (int16_t) (uint16_t) (RxData[3] << 8
 				| RxData[2]);
-
-		resolver_feedback_feed(&resolver_feedback, motor_speed_raw);
 		motor_speed = (motor_speed_raw > 0) ? (uint32_t) motor_speed_raw : 0u;
 		motor_speed_tick = HAL_GetTick();
-	} else if (RxHeader.StdId == CAN_ID_RX_BMS_DCL) {
-		uint16_t dcl_raw = (uint16_t) (RxData[1] << 8 | RxData[0]);
-		bms_dcl = (dcl_raw > 3u) ? (uint32_t) (dcl_raw - 3u) : 0u;
-	} else if (RxHeader.StdId == CAN_ID_RX_BMS_STATUS) {
-		bus_voltage = (RxData[5] << 8 | RxData[4]);
-		soc_kf_feed_bms((int16_t) (uint16_t) (RxData[7] << 8 | RxData[6]),
-				(uint16_t) (RxData[5] << 8 | RxData[4]), RxData[2], RxData[1],
-				HAL_GetTick());
-	} else if (RxHeader.StdId == CAN_ID_RX_BMS_CELL) {
-		soc_derate_feed_cells((uint16_t) (RxData[5] << 8 | RxData[4]),
-				(uint16_t) (RxData[7] << 8 | RxData[6]), HAL_GetTick());
+	} else if (RxHeader.StdId == CAN_ID_RX_BMS_LIMITS) {
+		bms_limits_feed(RxData, (uint8_t) RxHeader.DLC, HAL_GetTick());
 	} else if (RxHeader.StdId == LC_AIM_WHEEL_SPEED_CAN_ID) {
 		uint16_t fl_speed = RxData[1] << 8 | RxData[0];
 		lc_feed_wheel_speed(fl_speed);
-	} else if (RxHeader.StdId == SENSOR_AIM_ACCEL_CAN_ID) {
-		int16_t raw_accel_x = (int16_t)((RxData[1] << 8 | RxData[0]));
-		int16_t raw_accel_y = (int16_t)((RxData[3] << 8 | RxData[2]));
-		int16_t raw_accel_z = (int16_t)((RxData[5] << 8 | RxData[4]));
-
-		aim_accelerometer_feed(&aim_accelerometer, raw_accel_x, raw_accel_y, raw_accel_z);
 	}
 }
 
@@ -274,20 +245,9 @@ int main(void)
 	HAL_CAN_ConfigFilter(&hcan, &canfilterconfig);
 
 	canfilterconfig.FilterActivation = CAN_FILTER_ENABLE;
-	canfilterconfig.FilterBank = 4; /* BMS current limit */
+	canfilterconfig.FilterBank = 4; /* BMS power limits */
 	canfilterconfig.FilterFIFOAssignment = CAN_RX_FIFO0;
-	canfilterconfig.FilterIdHigh = CAN_ID_RX_BMS_DCL << 5;
-	canfilterconfig.FilterIdLow = 0;
-	canfilterconfig.FilterMaskIdHigh = CAN_STID_MASK_HIGH;
-	canfilterconfig.FilterMaskIdLow = CAN_STID_MASK_LOW;
-	canfilterconfig.FilterMode = CAN_FILTERMODE_IDMASK;
-	canfilterconfig.FilterScale = CAN_FILTERSCALE_32BIT;
-	HAL_CAN_ConfigFilter(&hcan, &canfilterconfig);
-
-	canfilterconfig.FilterActivation = CAN_FILTER_ENABLE;
-	canfilterconfig.FilterBank = 5; /* BMS status */
-	canfilterconfig.FilterFIFOAssignment = CAN_RX_FIFO0;
-	canfilterconfig.FilterIdHigh = CAN_ID_RX_BMS_STATUS << 5;
+	canfilterconfig.FilterIdHigh = CAN_ID_RX_BMS_LIMITS << 5;
 	canfilterconfig.FilterIdLow = 0;
 	canfilterconfig.FilterMaskIdHigh = CAN_STID_MASK_HIGH;
 	canfilterconfig.FilterMaskIdLow = CAN_STID_MASK_LOW;
@@ -299,28 +259,6 @@ int main(void)
 	canfilterconfig.FilterBank = 6; /* Front wheel speed */
 	canfilterconfig.FilterFIFOAssignment = CAN_RX_FIFO0;
 	canfilterconfig.FilterIdHigh = LC_AIM_WHEEL_SPEED_CAN_ID << 5;
-	canfilterconfig.FilterIdLow = 0;
-	canfilterconfig.FilterMaskIdHigh = CAN_STID_MASK_HIGH;
-	canfilterconfig.FilterMaskIdLow = CAN_STID_MASK_LOW;
-	canfilterconfig.FilterMode = CAN_FILTERMODE_IDMASK;
-	canfilterconfig.FilterScale = CAN_FILTERSCALE_32BIT;
-	HAL_CAN_ConfigFilter(&hcan, &canfilterconfig);
-
-	canfilterconfig.FilterActivation = CAN_FILTER_ENABLE;
-	canfilterconfig.FilterBank = 7; /* BMS low cell */
-	canfilterconfig.FilterFIFOAssignment = CAN_RX_FIFO0;
-	canfilterconfig.FilterIdHigh = CAN_ID_RX_BMS_CELL << 5;
-	canfilterconfig.FilterIdLow = 0;
-	canfilterconfig.FilterMaskIdHigh = CAN_STID_MASK_HIGH;
-	canfilterconfig.FilterMaskIdLow = CAN_STID_MASK_LOW;
-	canfilterconfig.FilterMode = CAN_FILTERMODE_IDMASK;
-	canfilterconfig.FilterScale = CAN_FILTERSCALE_32BIT;
-	HAL_CAN_ConfigFilter(&hcan, &canfilterconfig);
-
-	canfilterconfig.FilterActivation = CAN_FILTER_ENABLE;
-	canfilterconfig.FilterBank = 8; /* AiM Accelerometer */
-	canfilterconfig.FilterFIFOAssignment = CAN_RX_FIFO0;
-	canfilterconfig.FilterIdHigh = SENSOR_AIM_ACCEL_CAN_ID << 5;
 	canfilterconfig.FilterIdLow = 0;
 	canfilterconfig.FilterMaskIdHigh = CAN_STID_MASK_HIGH;
 	canfilterconfig.FilterMaskIdLow = CAN_STID_MASK_LOW;
@@ -342,15 +280,8 @@ int main(void)
 #if REGEN_ENABLE
 	regen_init();
 #endif
-	soc_kf_init();
-	soc_derate_init();
+	bms_limits_init();
 	control_init(&ctrl);
-
-	aim_accelerometer_init(&aim_accelerometer);
-	resolver_feedback_init(&resolver_feedback);
-	speed_encoder_init(&encoder_left);
-	speed_encoder_init(&encoder_right);
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -439,16 +370,11 @@ int main(void)
 		should_disable_inverter = control_fault_debounce(&ctrl, fault,
 				loop_dt_ms) || !ready_to_drive;
 
-		const soc_kf_debug_t *kf = soc_kf_get_debug();
-		current_limit = soc_derate_dcl(kf, bms_dcl, loop_tick, loop_dt_ms);
-
-		aim_accelerometer_upkeep(&aim_accelerometer);
-		resolver_feedback_upkeep(&resolver_feedback);
-		speed_encoder_upkeep(&encoder_left);
-		speed_encoder_upkeep(&encoder_right);
+		bms_limits_t lim;
+		bms_limits_get(loop_tick, &lim);
 
 		torque_request = control_torque_limit(control_torque_map(tps_combined),
-				motor_speed, current_limit);
+				motor_speed, lim.dpl_w);
 
 #if REGEN_ENABLE
 		const uint8_t speed_stale = (int32_t) (loop_tick - motor_speed_tick)
@@ -457,7 +383,7 @@ int main(void)
 				|| should_disable_inverter || speed_stale
 				|| launch_control_enable;
 		torque_request = regen_update(torque_request, motor_speed, tps_combined,
-				kf, regen_cut, loop_dt_ms);
+				&lim, regen_cut, loop_dt_ms);
 #endif
 
 		lc_feed_tick(HAL_GetTick());
@@ -514,16 +440,16 @@ int main(void)
 
 			can_tx_send(CAN_ID_TX_RTD, TxData, 2);
 
-			soc_kf_update(HAL_GetTick());
-			{
-				uint8_t kfData[8];
-				soc_kf_pack_state(kfData);
-				kfData[7] = (uint8_t)CAP(loop_dt_max_ms, 255u);
-				can_tx_send(SOC_KF_CAN_ID_STATE, kfData, 8);
+			for (uint32_t i = 0; i < 7; i++) {
+				TxData[i] = 0;
 			}
+			TxData[7] = (uint8_t) CAP(loop_dt_max_ms, 255u);
+			can_tx_send(CAN_ID_TX_LOOP, TxData, 8);
 
-			soc_derate_pack_debug(TxData);
-			can_tx_send(SOC_DERATE_CAN_ID, TxData, 8);
+			control_pack_limits(TxData,
+					control_torque_limit(1.0f, motor_speed, lim.dpl_w),
+					(int32_t) (10.0f * regen_get_debug()->max_nm), &lim);
+			can_tx_send(CAN_ID_TX_LIMITS, TxData, 8);
 
 #if REGEN_ENABLE
 			regen_pack_debug(TxData);
