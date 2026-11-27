@@ -6,7 +6,6 @@
 
 # prevent indexing builds for VSCode from writing to flash-log
 if [ "${SKIP_FLASH_LOG:-0}" = "1" ]; then
-    [ -f "$OUT" ] || write_header 00000000 "$FLAG_NONE"
     exit 0
 fi
 

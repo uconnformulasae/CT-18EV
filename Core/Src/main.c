@@ -109,7 +109,7 @@ volatile uint32_t loop_dt_max_ms = 0;
 
 static uint8_t lc_was_enabled = 0;
 static control_t ctrl;
-static uint8_t reset_cause = 1;
+static uint8_t reset_cause = 0;
 
 static uint8_t read_reset_cause(void) {
 	uint8_t cause = 0;
