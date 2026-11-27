@@ -1,4 +1,6 @@
 #include "app.h"
+
+extern "C" {
 #include "config.h"
 #include "pinout.h"
 #include "adc.h"
@@ -9,6 +11,7 @@
 #include "bms_limits.h"
 #include "control.h"
 #include "version.h"
+}
 
 #define CAP(v, hi)       (((v) > (hi)) ? (hi) : (v))
 #define CLAMP(v, lo, hi) (((v) < (lo)) ? (lo) : CAP(v, hi))
