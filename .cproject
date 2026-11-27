@@ -78,6 +78,7 @@
 									<listOptionValue builtIn="false" value="-fno-rtti"/>
 									<listOptionValue builtIn="false" value="-fno-exceptions"/>
 									<listOptionValue builtIn="false" value="-fno-threadsafe-statics"/>
+									<listOptionValue builtIn="false" value="-fno-unwind-tables -fno-asynchronous-unwind-tables"/>
 									<listOptionValue builtIn="false" value="-Wdouble-promotion"/>
 									<listOptionValue builtIn="false" value="-Wnull-dereference"/>
 									<listOptionValue builtIn="false" value="-Wcast-align"/>
