@@ -43,7 +43,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback_Impl(CAN_HandleTypeDef *hcan) {
 	}
 
 	if (rx_header.IDE != CAN_ID_STD) {
-		ext_frame_count++;
+		ext_frame_count += 1;
 		return;
 	}
 
@@ -61,7 +61,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback_Impl(CAN_HandleTypeDef *hcan) {
 		motor_speed = (motor_speed_raw > 0) ? (uint32_t) motor_speed_raw : 0u;
 		motor_speed_tick = HAL_GetTick();
 	} else if (rx_header.StdId == CAN_ID_RX_BMS_LIMITS) {
-		bms_limits_feed(rx_data, (uint8_t) rx_header.DLC, HAL_GetTick());
+		bms_limits_feed(rx_data, static_cast<float>(rx_header.DLC), HAL_GetTick());
 	} else if (rx_header.StdId == LC_AIM_WHEEL_SPEED_CAN_ID) {
 		uint16_t fl_speed = rx_data[1] << 8 | rx_data[0];
 		lc_feed_wheel_speed(fl_speed);
@@ -190,11 +190,11 @@ void app_loop(IWDG_HandleTypeDef* hiwdg) {
 		bps_adc = adc_bps();
 
 		const control_pedals_t pedals = control_pedals(&ctrl,
-				(float) tps1_adc * ADC_TPS_V_PER_COUNT,
-				(float) tps2_adc * ADC_TPS_V_PER_COUNT);
+				static_cast<float>(tps1_adc * ADC_TPS_V_PER_COUNT),
+				static_cast<float>(tps2_adc * ADC_TPS_V_PER_COUNT));
 		tps_combined = pedals.tps;
 
-		bps = (float) bps_adc * ADC_BPS_V_PER_COUNT;
+		bps = static_cast<float>(bps_adc * ADC_BPS_V_PER_COUNT);
 		/* A shorted sensor must not count as braking for the RTD interlock */
 		const uint8_t bps_oor = control_bps_oor(bps);
 		brake_pressed = bps > BPS_SETPOINT_V && !bps_oor;
@@ -273,7 +273,7 @@ void app_loop(IWDG_HandleTypeDef* hiwdg) {
 		}
 
 		if (loop_tick - bps_tick >= BPS_TX_MS) {
-			control_pack_bps(tx_data, control_bps_psi(bps), (uint16_t) bps_adc,
+			control_pack_bps(tx_data, control_bps_psi(bps), static_cast<uint16_t>(bps_adc),
 					brake_pressed, bps_oor);
 			can_tx_send(CAN_ID_TX_BPS, tx_data, CAN_BPS_DLC);
 			bps_tick = loop_tick;
@@ -281,7 +281,7 @@ void app_loop(IWDG_HandleTypeDef* hiwdg) {
 
 		if (print_ready) {
 			const control_status_t status = {
-				.rtd_timeout = (uint8_t) (rtd_timeout & 0xFF),
+				.rtd_timeout = static_cast<uint8_t>(rtd_timeout & 0xFF),
 				.bps_adc = bps_adc,
 				.tps1_adc = tps1_adc,
 				.tps2_adc = tps2_adc,
@@ -303,12 +303,12 @@ void app_loop(IWDG_HandleTypeDef* hiwdg) {
 			for (uint32_t i = 0; i < 7; i++) {
 				tx_data[i] = 0;
 			}
-			tx_data[7] = (uint8_t) CAP(loop_dt_max_ms, 255u);
+			tx_data[7] = static_cast<uint8_t>(CAP(loop_dt_max_ms, 255u));
 			can_tx_send(CAN_ID_TX_LOOP, tx_data, 8);
 
 			control_pack_limits(tx_data,
 					control_torque_limit(1.0f, motor_speed, lim.dpl_w),
-					(int32_t) (10.0f * regen_get_debug()->max_nm), &lim);
+					static_cast<int32_t>(10.0f * regen_get_debug()->max_nm), &lim);
 			can_tx_send(CAN_ID_TX_LIMITS, tx_data, 8);
 
 #if REGEN_ENABLE
