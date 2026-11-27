@@ -82,7 +82,6 @@
 									<listOptionValue builtIn="false" value="-Wdouble-promotion"/>
 									<listOptionValue builtIn="false" value="-Wnull-dereference"/>
 									<listOptionValue builtIn="false" value="-Wcast-align"/>
-									<listOptionValue builtIn="false" value="-Wold-style-cast"/>
 									<listOptionValue builtIn="false" value="-Wsign-conversion"/>
 									<listOptionValue builtIn="false" value="-std=gnu++23"/>
 								</option>
