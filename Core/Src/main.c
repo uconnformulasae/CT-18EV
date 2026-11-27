@@ -183,6 +183,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 int main(void)
 {
 
+    0;
+    
   /* USER CODE BEGIN 1 */
 	for (uint32_t i = 0; i < sizeof(RxData); i++) {
 		RxData[i] = 0;
