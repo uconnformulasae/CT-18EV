@@ -152,13 +152,19 @@ int main(void)
     /* Infinite loop */
     /* USER CODE BEGIN WHILE */
     HAL_TIM_Base_Start_IT(&htim2);
-	HAL_TIM_Base_Start_IT(&htim3);
+    HAL_TIM_Base_Start_IT(&htim3);
+    MX_IWDG_Init();
     
-    /* Started last so init time doesn't count against the timeout */
-	MX_IWDG_Init();
-
-    app_loop(&hiwdg, reset_cause);
+    app_start();
+    
+    while (1)
+    {
     /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
+        app_step(&hiwdg, reset_cause);
+    }
+    /* USER CODE END 3 */
 }
 
 /**
