@@ -188,6 +188,7 @@ int main(void)
 		RxData[i] = 0;
 	}
 	reset_cause = read_reset_cause();
+    printf("??");
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
