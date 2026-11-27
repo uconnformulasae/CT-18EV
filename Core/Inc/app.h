@@ -7,7 +7,7 @@ extern "C" {
 
 // C++ entry point called from main.c
 void app_init(CAN_HandleTypeDef* hcan);
-void app_loop();
+void app_loop(IWDG_HandleTypeDef* hiwdg);
 
 //
 void HAL_CAN_RxFifo0MsgPendingCallback_Impl(CAN_HandleTypeDef *hcan);

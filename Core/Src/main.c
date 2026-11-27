@@ -157,7 +157,7 @@ int main(void)
     /* Started last so init time doesn't count against the timeout */
 	MX_IWDG_Init();
 
-    app_loop();
+    app_loop(&hiwdg);
     /* USER CODE END WHILE */
 }
 
