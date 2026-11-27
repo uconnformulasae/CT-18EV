@@ -84,6 +84,7 @@
 									<listOptionValue builtIn="false" value="-Wcast-align"/>
 									<listOptionValue builtIn="false" value="-Wold-style-cast"/>
 									<listOptionValue builtIn="false" value="-Wsign-conversion"/>
+									<listOptionValue builtIn="false" value="-std=gnu++23"/>
 								</option>
 								<inputType id="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.cpp.compiler.input.cpp.547657189" superClass="com.st.stm32cube.ide.mcu.gnu.managedbuild.tool.cpp.compiler.input.cpp"/>
 							</tool>
