@@ -21,18 +21,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <math.h>
-
 #include "config.h"
 #include "pinout.h"
-#include "adc.h"
-#include "can_tx.h"
-#include "rtd.h"
-#include "launch_control.h"
-#include "regen.h"
-#include "bms_limits.h"
-#include "control.h"
-#include "version.h"
+#include "app.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -85,30 +76,6 @@ static void MX_IWDG_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-#define CAP(v, hi)       (((v) > (hi)) ? (hi) : (v))
-#define CLAMP(v, lo, hi) (((v) < (lo)) ? (lo) : CAP(v, hi))
-
-CAN_RxHeaderTypeDef RxHeader;
-uint8_t RxData[8];
-
-volatile uint32_t motor_speed = 0;
-volatile uint32_t motor_speed_tick = 0;
-volatile uint8_t inverter_enabled = 0;
-volatile uint8_t inverter_lockout = 1;
-volatile uint8_t control_ready = 0;
-volatile uint8_t print_ready = 0;
-volatile uint8_t ready_to_drive = 0;
-volatile uint16_t rtd_timeout = RTD_TIMEOUT_INIT;
-volatile uint8_t rtd_buzzer_counter = 0;
-
-volatile uint8_t inv_message = 0;
-volatile uint16_t ext_frame_count = 0;
-
-/* Worst control loop period (ms) */
-volatile uint32_t loop_dt_max_ms = 0;
-
-static uint8_t lc_was_enabled = 0;
-static control_t ctrl;
 static uint8_t reset_cause = 0;
 
 static uint8_t read_reset_cause(void) {
@@ -131,47 +98,13 @@ static uint8_t read_reset_cause(void) {
 }
 
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan) {
-	RxHeader.StdId = 0;
-	if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) != HAL_OK) {
-		return;
-	}
-	if (RxHeader.IDE != CAN_ID_STD) {
-		ext_frame_count++;
-		return;
-	}
-
-	if (RxHeader.StdId == CAN_ID_RX_INVERTER_STATE) {
-		inverter_enabled = RxData[6] & 0x01;
-		inverter_lockout = (RxData[6] >> 7) & 0x01;
-		uint8_t ready_pin_state = (RxData[3] >> 1) & 0x01;
-		inv_message = RxData[6];
-		if (ready_pin_state) {
-			rtd_timeout = 0;
-		}
-	} else if (RxHeader.StdId == CAN_ID_RX_MOTOR_SPEED) {
-		int16_t motor_speed_raw = (int16_t) (uint16_t) (RxData[3] << 8
-				| RxData[2]);
-		motor_speed = (motor_speed_raw > 0) ? (uint32_t) motor_speed_raw : 0u;
-		motor_speed_tick = HAL_GetTick();
-	} else if (RxHeader.StdId == CAN_ID_RX_BMS_LIMITS) {
-		bms_limits_feed(RxData, (uint8_t) RxHeader.DLC, HAL_GetTick());
-	} else if (RxHeader.StdId == LC_AIM_WHEEL_SPEED_CAN_ID) {
-		uint16_t fl_speed = RxData[1] << 8 | RxData[0];
-		lc_feed_wheel_speed(fl_speed);
-	}
+    // Forward to C++
+	HAL_CAN_RxFifo0MsgPendingCallback_Impl(hcan);
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
-	if (htim->Instance == TIM2) {
-		control_ready = 1;
-	} else if (htim->Instance == TIM3) {
-		print_ready = 1;
-		if (ready_to_drive && rtd_buzzer_counter < RTD_BUZZER_COUNTER_MAX) {
-			rtd_buzzer_counter += 1;
-		}
-		rtd_timeout += 1;
-		rtd_timeout = CAP(rtd_timeout, RTD_TIMEOUT_MAX);
-	}
+    // Forward to C++
+	HAL_TIM_PeriodElapsedCallback_Impl(htim);
 }
 
 /* USER CODE END 0 */
@@ -182,290 +115,50 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
   */
 int main(void)
 {
+    /* USER CODE BEGIN 1 */
+    reset_cause = read_reset_cause();
+    /* USER CODE END 1 */
 
-  /* USER CODE BEGIN 1 */
-	for (uint32_t i = 0; i < sizeof(RxData); i++) {
-		RxData[i] = 0;
-	}
+    /* MCU Configuration--------------------------------------------------------*/
 
-	reset_cause = read_reset_cause();
-  /* USER CODE END 1 */
+    /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+    HAL_Init();
 
-  /* MCU Configuration--------------------------------------------------------*/
+    /* USER CODE BEGIN Init */
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+    /* USER CODE END Init */
 
-  /* USER CODE BEGIN Init */
+    /* Configure the system clock */
+    SystemClock_Config();
 
-  /* USER CODE END Init */
+    /* USER CODE BEGIN SysInit */
 
-  /* Configure the system clock */
-  SystemClock_Config();
+    /* USER CODE END SysInit */
 
-  /* USER CODE BEGIN SysInit */
+    /* Initialize all configured peripherals */
+    MX_GPIO_Init();
+    MX_DMA_Init();
+    MX_ADC1_Init();
+    MX_CAN_Init();
+    MX_TIM2_Init();
+    MX_TIM3_Init();
+    MX_ADC2_Init();
+    MX_ADC3_Init();
 
-  /* USER CODE END SysInit */
+    /* USER CODE BEGIN 2 */
+	app_init(&hcan);
+    /* USER CODE END 2 */
 
-  /* Initialize all configured peripherals */
-  MX_GPIO_Init();
-  MX_DMA_Init();
-  MX_ADC1_Init();
-  MX_CAN_Init();
-  MX_TIM2_Init();
-  MX_TIM3_Init();
-  MX_ADC2_Init();
-  MX_ADC3_Init();
-  /* USER CODE BEGIN 2 */
-	uint8_t TxData[8];
-	/* Bank 1 held 0x0B1 (dynamic torque limit); nothing decodes it. */
-	CAN_FilterTypeDef canfilterconfig;
-
-	canfilterconfig.FilterActivation = CAN_FILTER_ENABLE;
-	canfilterconfig.FilterBank = 2; /* Inverter state */
-	canfilterconfig.FilterFIFOAssignment = CAN_RX_FIFO0;
-	canfilterconfig.FilterIdHigh = CAN_ID_RX_INVERTER_STATE << 5;
-	canfilterconfig.FilterIdLow = 0;
-	canfilterconfig.FilterMaskIdHigh = CAN_STID_MASK_HIGH;
-	canfilterconfig.FilterMaskIdLow = CAN_STID_MASK_LOW;
-	canfilterconfig.FilterMode = CAN_FILTERMODE_IDMASK;
-	canfilterconfig.FilterScale = CAN_FILTERSCALE_32BIT;
-	HAL_CAN_ConfigFilter(&hcan, &canfilterconfig);
-
-	canfilterconfig.FilterActivation = CAN_FILTER_ENABLE;
-	canfilterconfig.FilterBank = 3; /* Motor speed */
-	canfilterconfig.FilterFIFOAssignment = CAN_RX_FIFO0;
-	canfilterconfig.FilterIdHigh = CAN_ID_RX_MOTOR_SPEED << 5;
-	canfilterconfig.FilterIdLow = 0;
-	canfilterconfig.FilterMaskIdHigh = CAN_STID_MASK_HIGH;
-	canfilterconfig.FilterMaskIdLow = CAN_STID_MASK_LOW;
-	canfilterconfig.FilterMode = CAN_FILTERMODE_IDMASK;
-	canfilterconfig.FilterScale = CAN_FILTERSCALE_32BIT;
-	HAL_CAN_ConfigFilter(&hcan, &canfilterconfig);
-
-	canfilterconfig.FilterActivation = CAN_FILTER_ENABLE;
-	canfilterconfig.FilterBank = 4; /* BMS power limits */
-	canfilterconfig.FilterFIFOAssignment = CAN_RX_FIFO0;
-	canfilterconfig.FilterIdHigh = CAN_ID_RX_BMS_LIMITS << 5;
-	canfilterconfig.FilterIdLow = 0;
-	canfilterconfig.FilterMaskIdHigh = CAN_STID_MASK_HIGH;
-	canfilterconfig.FilterMaskIdLow = CAN_STID_MASK_LOW;
-	canfilterconfig.FilterMode = CAN_FILTERMODE_IDMASK;
-	canfilterconfig.FilterScale = CAN_FILTERSCALE_32BIT;
-	HAL_CAN_ConfigFilter(&hcan, &canfilterconfig);
-
-	canfilterconfig.FilterActivation = CAN_FILTER_ENABLE;
-	canfilterconfig.FilterBank = 6; /* Front wheel speed */
-	canfilterconfig.FilterFIFOAssignment = CAN_RX_FIFO0;
-	canfilterconfig.FilterIdHigh = LC_AIM_WHEEL_SPEED_CAN_ID << 5;
-	canfilterconfig.FilterIdLow = 0;
-	canfilterconfig.FilterMaskIdHigh = CAN_STID_MASK_HIGH;
-	canfilterconfig.FilterMaskIdLow = CAN_STID_MASK_LOW;
-	canfilterconfig.FilterMode = CAN_FILTERMODE_IDMASK;
-	canfilterconfig.FilterScale = CAN_FILTERSCALE_32BIT;
-	HAL_CAN_ConfigFilter(&hcan, &canfilterconfig);
-
-	HAL_CAN_Start(&hcan);
-
-	if (HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING)
-			!= HAL_OK) {
-		Error_Handler();
-	}
-
-	lc_init();
-	adc_init();
-	rtd_init();
-	can_tx_init();
-#if REGEN_ENABLE
-	regen_init();
-#endif
-	bms_limits_init();
-	control_init(&ctrl);
-  /* USER CODE END 2 */
-
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
-
-	float tps_combined = 0;
-	float bps = 0;
-	int32_t torque_request = 0;
-	uint8_t heartbeat_counter = 0;
-	uint32_t tps1_adc = 0;
-	uint32_t tps2_adc = 0;
-	uint32_t bps_adc = 0;
-	uint8_t brake_pressed = 0;
-	uint8_t bse_error = 0;
-	uint8_t should_disable_inverter = 0;
-
-	HAL_TIM_Base_Start_IT(&htim2);
+    /* Infinite loop */
+    /* USER CODE BEGIN WHILE */
+    HAL_TIM_Base_Start_IT(&htim2);
 	HAL_TIM_Base_Start_IT(&htim3);
-
-	/* Started last so init time doesn't count against the timeout */
+    
+    /* Started last so init time doesn't count against the timeout */
 	MX_IWDG_Init();
 
-	uint8_t rtd_raw = 0;
-	uint32_t last_loop_tick = HAL_GetTick();
-	uint32_t version_tick = last_loop_tick - VERSION_TX_MS;
-	uint32_t bps_tick = last_loop_tick;
-
-	while (1) {
-		can_tx_pump();
-
-		if (!control_ready) {
-			continue;
-		}
-		control_ready = 0;
-
-		const uint32_t loop_tick = HAL_GetTick();
-		const uint32_t loop_dt_ms = loop_tick - last_loop_tick;
-		last_loop_tick = loop_tick;
-		if (loop_dt_ms > loop_dt_max_ms) {
-			loop_dt_max_ms = loop_dt_ms;
-		}
-
-		adc_update();
-		tps1_adc = adc_tps1();
-		tps2_adc = adc_tps2();
-		bps_adc = adc_bps();
-
-		const control_pedals_t pedals = control_pedals(&ctrl,
-				(float) tps1_adc * ADC_TPS_V_PER_COUNT,
-				(float) tps2_adc * ADC_TPS_V_PER_COUNT);
-		tps_combined = pedals.tps;
-
-		bps = (float) bps_adc * ADC_BPS_V_PER_COUNT;
-		/* A shorted sensor must not count as braking for the RTD interlock */
-		const uint8_t bps_oor = control_bps_oor(bps);
-		brake_pressed = bps > BPS_SETPOINT_V && !bps_oor;
-
-		rtd_raw = (HAL_GPIO_ReadPin(PIN_RTD_BUTTON_PORT, PIN_RTD_BUTTON)
-				== PIN_RTD_BUTTON_ACTIVE);
-		rtd_raw &= brake_pressed;
-
-		if (rtd_debounce_update(rtd_raw, loop_dt_ms)) {
-			ready_to_drive = 1;
-		}
-
-		ready_to_drive &= rtd_timeout < RTD_TIMEOUT_TICKS;
-
-		HAL_GPIO_WritePin(PIN_RTD_LIGHT_PORT, PIN_RTD_LIGHT, ready_to_drive);
-
-		if (ready_to_drive == 0) {
-			rtd_buzzer_counter = 0;
-		} else {
-			if (rtd_buzzer_counter < RTD_BUZZER_TICKS) {
-				HAL_GPIO_WritePin(PIN_RTD_BUZZER_PORT, PIN_RTD_BUZZER,
-						GPIO_PIN_SET);
-			} else {
-				HAL_GPIO_WritePin(PIN_RTD_BUZZER_PORT, PIN_RTD_BUZZER,
-						GPIO_PIN_RESET);
-			}
-		}
-
-		bse_error = control_bse(&ctrl, brake_pressed, tps_combined);
-
-		const uint8_t fault = pedals.tps1_oor || pedals.tps2_oor
-				|| pedals.tps_disagree || bse_error || bps_oor;
-		should_disable_inverter = control_fault_debounce(&ctrl, fault,
-				loop_dt_ms) || !ready_to_drive;
-
-		bms_limits_t lim;
-		bms_limits_get(loop_tick, &lim);
-
-		torque_request = control_torque_limit(control_torque_map(tps_combined),
-				motor_speed, lim.dpl_w);
-
-#if REGEN_ENABLE
-		const uint8_t speed_stale = (int32_t) (loop_tick - motor_speed_tick)
-				> (int32_t) MOTOR_SPEED_TIMEOUT_MS;
-		const uint8_t regen_cut = brake_pressed || fault
-				|| should_disable_inverter || speed_stale
-				|| launch_control_enable;
-		torque_request = regen_update(torque_request, motor_speed, tps_combined,
-				&lim, regen_cut, loop_dt_ms);
-#endif
-
-		lc_feed_tick(HAL_GetTick());
-		if (launch_control_enable) {
-			torque_request = lc_update(torque_request, motor_speed,
-					tps_combined);
-			lc_was_enabled = 1;
-		} else if (lc_was_enabled) {
-			lc_init();
-			lc_was_enabled = 0;
-		}
-
-		if (should_disable_inverter) {
-			torque_request = 0;
-		}
-
-		control_pack_inverter(TxData, torque_request, inverter_lockout,
-				should_disable_inverter, heartbeat_counter);
-		can_tx_send(CAN_ID_TX_INVERTER_CMD, TxData, 8);
-		heartbeat_counter += 1;
-		heartbeat_counter = heartbeat_counter & CAN_HEARTBEAT_MASK;
-
-		if (loop_tick - version_tick >= VERSION_TX_MS) {
-			version_pack(TxData);
-			can_tx_send(VERSION_CAN_ID, TxData, VERSION_DLC);
-			version_tick = loop_tick;
-		}
-
-		if (loop_tick - bps_tick >= BPS_TX_MS) {
-			control_pack_bps(TxData, control_bps_psi(bps), (uint16_t) bps_adc,
-					brake_pressed, bps_oor);
-			can_tx_send(CAN_ID_TX_BPS, TxData, CAN_BPS_DLC);
-			bps_tick = loop_tick;
-		}
-
-		if (print_ready) {
-			const control_status_t status = {
-				.rtd_timeout = (uint8_t) (rtd_timeout & 0xFF),
-				.bps_adc = bps_adc,
-				.tps1_adc = tps1_adc,
-				.tps2_adc = tps2_adc,
-				.pedals = pedals,
-				.bse = bse_error,
-				.ready_to_drive = ready_to_drive,
-				.disable = should_disable_inverter,
-				.inverter_enabled = inverter_enabled,
-				.inverter_lockout = inverter_lockout,
-			};
-			control_pack_debug(TxData, &status);
-			can_tx_send(CAN_ID_TX_DEBUG, TxData, 8);
-
-			TxData[0] = (ready_to_drive) & 0x01;
-			TxData[1] = reset_cause;
-
-			can_tx_send(CAN_ID_TX_RTD, TxData, 2);
-
-			for (uint32_t i = 0; i < 7; i++) {
-				TxData[i] = 0;
-			}
-			TxData[7] = (uint8_t) CAP(loop_dt_max_ms, 255u);
-			can_tx_send(CAN_ID_TX_LOOP, TxData, 8);
-
-			control_pack_limits(TxData,
-					control_torque_limit(1.0f, motor_speed, lim.dpl_w),
-					(int32_t) (10.0f * regen_get_debug()->max_nm), &lim);
-			can_tx_send(CAN_ID_TX_LIMITS, TxData, 8);
-
-#if REGEN_ENABLE
-			regen_pack_debug(TxData);
-			can_tx_send(REGEN_DEBUG_CAN_ID, TxData, REGEN_DEBUG_DLC);
-#endif
-
-			print_ready = 0;
-		}
-
-		/* Only a finished control step feeds the dog */
-		HAL_IWDG_Refresh(&hiwdg);
-
+    app_loop(&hiwdg, reset_cause);
     /* USER CODE END WHILE */
-
-    /* USER CODE BEGIN 3 */
-	}
-  /* USER CODE END 3 */
 }
 
 /**
@@ -845,46 +538,46 @@ static void MX_DMA_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
-  /* USER CODE BEGIN MX_GPIO_Init_1 */
-  /* USER CODE END MX_GPIO_Init_1 */
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    /* USER CODE BEGIN MX_GPIO_Init_1 */
+    /* USER CODE END MX_GPIO_Init_1 */
 
-  /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOD_CLK_ENABLE();
-  __HAL_RCC_GPIOC_CLK_ENABLE();
-  __HAL_RCC_GPIOB_CLK_ENABLE();
-  __HAL_RCC_GPIOA_CLK_ENABLE();
+    /* GPIO Ports Clock Enable */
+    __HAL_RCC_GPIOD_CLK_ENABLE();
+    __HAL_RCC_GPIOC_CLK_ENABLE();
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    __HAL_RCC_GPIOA_CLK_ENABLE();
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2, GPIO_PIN_RESET);
+    /*Configure GPIO pin Output Level */
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : PB0 */
-  GPIO_InitStruct.Pin = GPIO_PIN_0;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+    /*Configure GPIO pin : PB0 */
+    GPIO_InitStruct.Pin = GPIO_PIN_0;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PB1 PB2 */
-  GPIO_InitStruct.Pin = GPIO_PIN_1|GPIO_PIN_2;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+    /*Configure GPIO pins : PB1 PB2 */
+    GPIO_InitStruct.Pin = GPIO_PIN_1|GPIO_PIN_2;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PB4 PB5 PB6 */
-  GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+    /*Configure GPIO pins : PB4 PB5 PB6 */
+    GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6;
+    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /* USER CODE BEGIN MX_GPIO_Init_2 */
-  /* RTD button (PB14) configured here to persist across CubeMX generation */
-  GPIO_InitStruct.Pin = PIN_RTD_BUTTON;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = PIN_RTD_BUTTON_PULL;
-  HAL_GPIO_Init(PIN_RTD_BUTTON_PORT, &GPIO_InitStruct);
-  /* USER CODE END MX_GPIO_Init_2 */
+    /* USER CODE BEGIN MX_GPIO_Init_2 */
+    /* RTD button (PB14) configured here to persist across CubeMX generation */
+    GPIO_InitStruct.Pin = PIN_RTD_BUTTON;
+    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+    GPIO_InitStruct.Pull = PIN_RTD_BUTTON_PULL;
+    HAL_GPIO_Init(PIN_RTD_BUTTON_PORT, &GPIO_InitStruct);
+    /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */

@@ -36,5 +36,6 @@
 # VSCode configuration
 /.cache/
 /.vscode/
+.clangd
 compile_commands.json
 generate_compile_commands.sh
