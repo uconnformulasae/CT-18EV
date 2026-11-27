@@ -4,6 +4,11 @@
 # to Core/Inc/build_version.h. Your branch, index and files are untouched.
 # Never fails the build.
 
+# prevent indexing builds for VSCode from writing to flash-log
+if [ "${SKIP_FLASH_LOG:-0}" = "1" ]; then
+    exit 0
+fi
+
 cd "$(dirname "$0")/.." || exit 0
 
 OUT=Core/Inc/build_version.h

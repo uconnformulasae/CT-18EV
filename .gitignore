@@ -32,3 +32,9 @@
 
 # CubeIDE macOS artifact.
 /.osx.project
+
+# VSCode configuration
+/.cache/
+/.vscode/
+compile_commands.json
+generate_compile_commands.sh

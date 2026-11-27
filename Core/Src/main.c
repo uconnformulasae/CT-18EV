@@ -187,6 +187,7 @@ int main(void)
 	for (uint32_t i = 0; i < sizeof(RxData); i++) {
 		RxData[i] = 0;
 	}
+
 	reset_cause = read_reset_cause();
   /* USER CODE END 1 */
 
