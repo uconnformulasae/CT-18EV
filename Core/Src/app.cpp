@@ -88,8 +88,8 @@ void HAL_TIM_PeriodElapsedCallback_Impl(TIM_HandleTypeDef *htim) {
 	}
 }
 
-void app_init(CAN_HandleTypeDef* hcan) {
-	/* Bank 1 held 0x0B1 (dynamic torque limit); nothing decodes it. */
+void configure_can(CAN_HandleTypeDef* hcan) {
+    /* Bank 1 held 0x0B1 (dynamic torque limit); nothing decodes it. */
 	CAN_FilterTypeDef canfilterconfig;
 
 	canfilterconfig.FilterActivation = CAN_FILTER_ENABLE;
@@ -142,14 +142,17 @@ void app_init(CAN_HandleTypeDef* hcan) {
 			!= HAL_OK) {
 		Error_Handler();
 	}
+}
 
+void app_init(CAN_HandleTypeDef* hcan) {
+	configure_can(hcan);
 	lc_init();
 	adc_init();
 	rtd_init();
 	can_tx_init();
 
     #if REGEN_ENABLE
-        regen_init();
+    regen_init();
     #endif
 
     bms_limits_init();
@@ -168,16 +171,30 @@ void app_start() {
     bps_tick = last_loop_tick;
 }
 
+control_data_t controls_update() {
+    control_data_t controls;
+
+    adc_update();
+    controls.adcs.tps1_adc = adc_tps1();
+    controls.adcs.tps2_adc = adc_tps2();
+    controls.adcs.bps_adc = adc_bps();
+
+    const control_throttle_t throttle = control_throttle(&ctrl,
+        static_cast<float>(controls.adcs.tps1_adc * ADC_TPS_V_PER_COUNT),
+        static_cast<float>(controls.adcs.tps2_adc * ADC_TPS_V_PER_COUNT)
+    );
+    controls.throttle.tps = throttle.tps;
+
+    controls.brakes.bps = static_cast<float>(controls.adcs.bps_adc * ADC_BPS_V_PER_COUNT);
+    controls.brakes = control_brakes(controls.brakes.bps);
+
+    return controls;
+}
+
 void app_step(IWDG_HandleTypeDef* hiwdg, uint8_t reset_cause) {
     uint8_t tx_data[8];
-    float tps_combined = 0;
-	float bps = 0;
 	int32_t torque_request = 0;
 	
-	uint32_t tps1_adc = 0;
-	uint32_t tps2_adc = 0;
-	uint32_t bps_adc = 0;
-	uint8_t brake_pressed = 0;
 	uint8_t bse_error = 0;
 	uint8_t should_disable_inverter = 0;
 
@@ -203,24 +220,11 @@ void app_step(IWDG_HandleTypeDef* hiwdg, uint8_t reset_cause) {
         loop_dt_max_ms = loop_dt_ms;
     }
 
-    adc_update();
-    tps1_adc = adc_tps1();
-    tps2_adc = adc_tps2();
-    bps_adc = adc_bps();
-
-    const control_pedals_t pedals = control_pedals(&ctrl,
-            static_cast<float>(tps1_adc * ADC_TPS_V_PER_COUNT),
-            static_cast<float>(tps2_adc * ADC_TPS_V_PER_COUNT));
-    tps_combined = pedals.tps;
-
-    bps = static_cast<float>(bps_adc * ADC_BPS_V_PER_COUNT);
-    /* A shorted sensor must not count as braking for the RTD interlock */
-    const uint8_t bps_oor = control_bps_oor(bps);
-    brake_pressed = bps > BPS_SETPOINT_V && !bps_oor;
+    control_data_t controls = controls_update();
 
     rtd_raw = (HAL_GPIO_ReadPin(PIN_RTD_BUTTON_PORT, PIN_RTD_BUTTON)
             == PIN_RTD_BUTTON_ACTIVE);
-    rtd_raw &= brake_pressed;
+    rtd_raw &= controls.brakes.brake_pressed;
 
     if (rtd_debounce_update(rtd_raw, loop_dt_ms)) {
         ready_to_drive = 1;
@@ -242,17 +246,17 @@ void app_step(IWDG_HandleTypeDef* hiwdg, uint8_t reset_cause) {
         }
     }
 
-    bse_error = control_bse(&ctrl, brake_pressed, tps_combined);
+    bse_error = control_bse(&ctrl, controls.brakes.brake_pressed, controls.throttle.tps);
 
-    const uint8_t fault = pedals.tps1_oor || pedals.tps2_oor
-            || pedals.tps_disagree || bse_error || bps_oor;
+    const uint8_t fault = controls.throttle.tps1_oor || controls.throttle.tps2_oor
+            || controls.throttle.tps_disagree || bse_error || controls.brakes.bps_oor;
     should_disable_inverter = control_fault_debounce(&ctrl, fault,
             loop_dt_ms) || !ready_to_drive;
 
     bms_limits_t lim;
     bms_limits_get(loop_tick, &lim);
 
-    torque_request = control_torque_limit(control_torque_map(tps_combined),
+    torque_request = control_torque_limit(control_torque_map(controls.throttle.tps),
             motor_speed, lim.dpl_w);
 
 #if REGEN_ENABLE
@@ -268,7 +272,7 @@ void app_step(IWDG_HandleTypeDef* hiwdg, uint8_t reset_cause) {
     lc_feed_tick(HAL_GetTick());
     if (launch_control_enable) {
         torque_request = lc_update(torque_request, motor_speed,
-                tps_combined);
+                controls.throttle.tps);
         lc_was_enabled = 1;
     } else if (lc_was_enabled) {
         lc_init();
@@ -292,26 +296,23 @@ void app_step(IWDG_HandleTypeDef* hiwdg, uint8_t reset_cause) {
     }
 
     if (loop_tick - bps_tick >= BPS_TX_MS) {
-        control_pack_bps(tx_data, control_bps_psi(bps), static_cast<uint16_t>(bps_adc),
-                brake_pressed, bps_oor);
+        control_pack_bps(tx_data, control_bps_psi(controls.brakes.bps), static_cast<uint16_t>(controls.adcs.bps_adc),
+                controls.brakes.brake_pressed, controls.brakes.bps_oor);
         can_tx_send(CAN_ID_TX_BPS, tx_data, CAN_BPS_DLC);
         bps_tick = loop_tick;
     }
 
     if (print_ready) {
-        const control_status_t status = {
-            .rtd_timeout = static_cast<uint8_t>(rtd_timeout & 0xFF),
-            .bps_adc = bps_adc,
-            .tps1_adc = tps1_adc,
-            .tps2_adc = tps2_adc,
-            .pedals = pedals,
-            .bse = bse_error,
-            .ready_to_drive = ready_to_drive,
-            .disable = should_disable_inverter,
-            .inverter_enabled = inverter_enabled,
-            .inverter_lockout = inverter_lockout,
-        };
-        control_pack_debug(tx_data, &status);
+        control_pack_debug(
+            tx_data, &controls, 
+            rtd_timeout, 
+            inverter_lockout, 
+            inverter_enabled, 
+            bse_error, 
+            ready_to_drive, 
+            should_disable_inverter
+        );
+
         can_tx_send(CAN_ID_TX_DEBUG, tx_data, 8);
 
         tx_data[0] = (ready_to_drive) & 0x01;
@@ -325,7 +326,7 @@ void app_step(IWDG_HandleTypeDef* hiwdg, uint8_t reset_cause) {
 
         // copy once to prevent torn reads
         const uint32_t loop_dt_max_ms_copy=loop_dt_max_ms;
-        tx_data[7] = static_cast<uint8_t>(std::min(loop_dt_max_ms_copy, 255u));
+        tx_data[7] = static_cast<uint8_t>(std::min(loop_dt_max_ms_copy, static_cast<uint32_t>(255)));
         
         can_tx_send(CAN_ID_TX_LOOP, tx_data, 8);
 

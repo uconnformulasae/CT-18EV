@@ -1,4 +1,5 @@
 #include "control.h"
+#include "config.h"
 #include <math.h>
 
 void control_init(control_t *c)
@@ -21,9 +22,9 @@ static float iir(float *avg, float x)
     return *avg;
 }
 
-control_pedals_t control_pedals(control_t *c, float tps1_v, float tps2_v)
+control_throttle_t control_throttle(control_t *c, float tps1_v, float tps2_v)
 {
-    control_pedals_t p;
+    control_throttle_t p;
 
     p.tps1 = iir(&c->tps1_avg, calibrate(tps1_v, TPS1_0PER, TPS1_100PER));
     p.tps2 = iir(&c->tps2_avg, calibrate(tps2_v, TPS2_0PER, TPS2_100PER));
@@ -33,6 +34,18 @@ control_pedals_t control_pedals(control_t *c, float tps1_v, float tps2_v)
     p.tps2_oor = tps2_v < TPS2_FAULT_LOW || tps2_v > TPS2_FAULT_HIGH;
     p.tps_disagree = fabsf(p.tps1 - p.tps2) > APPS_TRIP_PERCENT;
     return p;
+}
+
+control_brakes_t control_brakes(float bps) {
+    control_brakes_t b;
+
+    b.bps = bps;
+
+    /* A shorted sensor must not count as braking for the RTD interlock */
+    b.bps_oor = control_bps_oor(bps);
+    b.brake_pressed = bps > BPS_SETPOINT_V && !b.bps_oor;
+
+    return b;
 }
 
 uint8_t control_bps_oor(float bps_v)
@@ -105,20 +118,26 @@ void control_pack_inverter(uint8_t *d, int32_t torque, uint8_t lockout, uint8_t 
     d[7] = 0x00;
 }
 
-void control_pack_debug(uint8_t *d, const control_status_t *s)
-{
-    const control_pedals_t *p = &s->pedals;
-
-    d[0] = s->rtd_timeout;
-    d[1] = (s->bps_adc >> 4) & 0xFF;
-    d[2] = (s->tps1_adc >> 4) & 0xFF;
-    d[3] = (s->tps2_adc >> 4) & 0xFF;
-    d[4] = (uint8_t)((s->inverter_lockout << 7) | (s->inverter_enabled << 6) |
-                     (p->tps_disagree << 5) | (p->tps2_oor << 4) | (p->tps1_oor << 3) |
-                     (s->bse << 2) | (s->ready_to_drive << 1) | s->disable);
-    d[5] = (int)(p->tps1 * 100) & 0xFF;
-    d[6] = (int)(p->tps2 * 100) & 0xFF;
-    d[7] = (int)(p->tps * 100) & 0xFF;
+void control_pack_debug(
+    uint8_t *buf, 
+    const control_data_t *controls, 
+    uint8_t rtd_timeout, 
+    uint8_t inverter_lockout, 
+    uint8_t inverter_enabled,
+    uint8_t bse_error,
+    uint8_t ready_to_drive,
+    uint8_t should_disable_inverter
+) {
+    buf[0] = rtd_timeout;
+    buf[1] = (controls->adcs.bps_adc >> 4) & 0xFF;
+    buf[2] = (controls->adcs.tps1_adc >> 4) & 0xFF;
+    buf[3] = (controls->adcs.tps2_adc >> 4) & 0xFF;
+    buf[4] = (uint8_t)((inverter_lockout << 7) | (inverter_enabled << 6) |
+                     (controls->throttle.tps_disagree << 5) | (controls->throttle.tps2_oor << 4) | (controls->throttle.tps1_oor << 3) |
+                     (bse_error << 2) | (ready_to_drive << 1) | should_disable_inverter);
+    buf[5] = (int)(controls->throttle.tps1 * 100) & 0xFF;
+    buf[6] = (int)(controls->throttle.tps2 * 100) & 0xFF;
+    buf[7] = (int)(controls->throttle.tps * 100) & 0xFF;
 }
 
 void control_pack_bps(uint8_t *d, float psi, uint16_t adc, uint8_t pressed, uint8_t oor)
