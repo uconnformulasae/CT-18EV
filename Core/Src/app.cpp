@@ -325,7 +325,7 @@ void app_step(IWDG_HandleTypeDef* hiwdg, uint8_t reset_cause) {
 
         // copy once to prevent torn reads
         const uint32_t loop_dt_max_ms_copy=loop_dt_max_ms;
-        tx_data[7] = static_cast<uint8_t>(std::min(loop_dt_max_ms_copy, 255u));
+        tx_data[7] = static_cast<uint8_t>(std::min(loop_dt_max_ms_copy, static_cast<uint32_t>(255)));
         
         can_tx_send(CAN_ID_TX_LOOP, tx_data, 8);
 
