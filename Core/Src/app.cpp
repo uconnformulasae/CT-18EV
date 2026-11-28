@@ -14,8 +14,7 @@ extern "C" {
 #include "version.h"
 }
 
-#define CAP(v, hi)       (((v) > (hi)) ? (hi) : (v))
-#define CLAMP(v, lo, hi) (((v) < (lo)) ? (lo) : CAP(v, hi))
+#include <algorithm>
 
 volatile uint32_t motor_speed = 0;
 volatile uint32_t motor_speed_tick = 0;
@@ -80,7 +79,12 @@ void HAL_TIM_PeriodElapsedCallback_Impl(TIM_HandleTypeDef *htim) {
 			rtd_buzzer_counter += 1;
 		}
 		rtd_timeout += 1;
-		rtd_timeout = CAP(rtd_timeout, RTD_TIMEOUT_MAX);
+        
+        // copy once to prevent torn reads
+        const uint16_t rtd_timeout_copy = rtd_timeout;
+
+        // note: should probably use constexpr instead of DEFINEs
+		rtd_timeout = std::min(rtd_timeout_copy, static_cast<uint16_t>(RTD_TIMEOUT_MAX));
 	}
 }
 
@@ -182,7 +186,6 @@ void app_step(IWDG_HandleTypeDef* hiwdg, uint8_t reset_cause) {
 	version_tick = last_loop_tick - VERSION_TX_MS;
 	bps_tick = last_loop_tick;
 
-    
     can_tx_pump();
 
     if (!control_ready) {
@@ -319,7 +322,11 @@ void app_step(IWDG_HandleTypeDef* hiwdg, uint8_t reset_cause) {
         for (uint32_t i = 0; i < 7; i++) {
             tx_data[i] = 0;
         }
-        tx_data[7] = static_cast<uint8_t>(CAP(loop_dt_max_ms, 255u));
+
+        // copy once to prevent torn reads
+        const uint32_t loop_dt_max_ms_copy=loop_dt_max_ms;
+        tx_data[7] = static_cast<uint8_t>(std::min(loop_dt_max_ms_copy, 255u));
+        
         can_tx_send(CAN_ID_TX_LOOP, tx_data, 8);
 
         control_pack_limits(tx_data,
