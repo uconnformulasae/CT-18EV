@@ -191,14 +191,40 @@ control_data_t controls_update() {
     return controls;
 }
 
+bool rtd_update(const control_data_t& controls, uint32_t loop_dt_ms) {
+    uint8_t rtd_raw = (HAL_GPIO_ReadPin(PIN_RTD_BUTTON_PORT, PIN_RTD_BUTTON)
+            == PIN_RTD_BUTTON_ACTIVE);
+    rtd_raw &= controls.brakes.brake_pressed;
+    
+    bool rtd = 0;
+
+    if (rtd_debounce_update(rtd_raw, loop_dt_ms)) {
+        rtd = true;
+    }
+
+    rtd &= rtd_timeout < RTD_TIMEOUT_TICKS;
+
+    HAL_GPIO_WritePin(PIN_RTD_LIGHT_PORT, PIN_RTD_LIGHT, rtd ? GPIO_PIN_SET : GPIO_PIN_RESET);
+
+    if (ready_to_drive == 0) {
+        rtd_buzzer_counter = 0;
+    } else {
+        if (rtd_buzzer_counter < RTD_BUZZER_TICKS) {
+            HAL_GPIO_WritePin(PIN_RTD_BUZZER_PORT, PIN_RTD_BUZZER,
+                    GPIO_PIN_SET);
+        } else {
+            HAL_GPIO_WritePin(PIN_RTD_BUZZER_PORT, PIN_RTD_BUZZER,
+                    GPIO_PIN_RESET);
+        }
+    }
+
+    return rtd;
+}
+
 void app_step(IWDG_HandleTypeDef* hiwdg, uint8_t reset_cause) {
     uint8_t tx_data[8];
 	int32_t torque_request = 0;
 	
-	uint8_t bse_error = 0;
-	uint8_t should_disable_inverter = 0;
-
-	uint8_t rtd_raw = 0;
 	last_loop_tick = HAL_GetTick();
 	version_tick = last_loop_tick - VERSION_TX_MS;
 	bps_tick = last_loop_tick;
@@ -221,36 +247,13 @@ void app_step(IWDG_HandleTypeDef* hiwdg, uint8_t reset_cause) {
     }
 
     control_data_t controls = controls_update();
+    ready_to_drive = rtd_update(controls, loop_dt_ms);
 
-    rtd_raw = (HAL_GPIO_ReadPin(PIN_RTD_BUTTON_PORT, PIN_RTD_BUTTON)
-            == PIN_RTD_BUTTON_ACTIVE);
-    rtd_raw &= controls.brakes.brake_pressed;
-
-    if (rtd_debounce_update(rtd_raw, loop_dt_ms)) {
-        ready_to_drive = 1;
-    }
-
-    ready_to_drive &= rtd_timeout < RTD_TIMEOUT_TICKS;
-
-    HAL_GPIO_WritePin(PIN_RTD_LIGHT_PORT, PIN_RTD_LIGHT, ready_to_drive ? GPIO_PIN_SET : GPIO_PIN_RESET);
-
-    if (ready_to_drive == 0) {
-        rtd_buzzer_counter = 0;
-    } else {
-        if (rtd_buzzer_counter < RTD_BUZZER_TICKS) {
-            HAL_GPIO_WritePin(PIN_RTD_BUZZER_PORT, PIN_RTD_BUZZER,
-                    GPIO_PIN_SET);
-        } else {
-            HAL_GPIO_WritePin(PIN_RTD_BUZZER_PORT, PIN_RTD_BUZZER,
-                    GPIO_PIN_RESET);
-        }
-    }
-
-    bse_error = control_bse(&ctrl, controls.brakes.brake_pressed, controls.throttle.tps);
+    bool bse_error = control_bse(&ctrl, controls.brakes.brake_pressed, controls.throttle.tps);
 
     const uint8_t fault = controls.throttle.tps1_oor || controls.throttle.tps2_oor
             || controls.throttle.tps_disagree || bse_error || controls.brakes.bps_oor;
-    should_disable_inverter = control_fault_debounce(&ctrl, fault,
+    bool should_disable_inverter = control_fault_debounce(&ctrl, fault,
             loop_dt_ms) || !ready_to_drive;
 
     bms_limits_t lim;
